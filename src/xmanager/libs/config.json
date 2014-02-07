@@ -1,0 +1,9 @@
+{
+    "ldap": {
+        "server": "ldaps://fajolpetit.upcnet.es",
+        "port": 636,
+        "base_dn": "dc=upcnet,dc=es",
+        "admin_cn": "cn=admin",
+        "admin_password": "gbksecret"
+    }
+}
