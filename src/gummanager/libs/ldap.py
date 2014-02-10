@@ -1,9 +1,6 @@
-from common import getConfig
-
 import ldap
 import ldap.modlist as modlist
-import base64, getpass, hashlib, os
-import sys
+import base64, hashlib, os
 
 
 class LdapServer(object):
@@ -77,25 +74,3 @@ class LdapServer(object):
         )
 
         self.ld.add_s(dn, ldif)
-
-def main():
-    if len(sys.argv) <= 1:
-        print 'new ldap ou name required'
-        sys.exit(1)
-
-    instance_name = sys.argv[1]
-
-    ld = LdapServer(**getConfig('ldap'))    
-    ld.connect()    
-    ld.addOU(instance_name)
-    ld.cd('ou={}'.format(instance_name))
-    ld.addUser('ldap', 'LDAP Access User', 'connldapnexio')
-    ld.addUser('restricted', 'Restricted User', '{}secret'.format(instance_name))
-    ld.addGroup('Managers')
-    ld.addOU('groups')
-    ld.addOU('users')
-    ld.disconnect()
-
-
-if __name__ == "__main__":
-    main()
