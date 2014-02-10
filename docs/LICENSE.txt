@@ -1,4 +1,4 @@
-xmanager.libs Copyright 2014, <YOUR NAME HERE>
+gummanager.libs Copyright 2014, <YOUR NAME HERE>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

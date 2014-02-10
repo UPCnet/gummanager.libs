@@ -14,7 +14,7 @@ long_description = (
     open('CHANGES.txt').read()
     + '\n')
 
-setup(name='xmanager.libs',
+setup(name='gummanager.libs',
       version=version,
       description="",
       long_description=long_description,
@@ -30,7 +30,7 @@ setup(name='xmanager.libs',
       license='gpl',
       packages=find_packages('src'),
       package_dir = {'': 'src'},
-      namespace_packages=['xmanager'],
+      namespace_packages=['gummanager'],
       include_package_data=True,
       zip_safe=False,
       install_requires=[
