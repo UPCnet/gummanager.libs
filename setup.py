@@ -36,6 +36,10 @@ setup(name='gummanager.libs',
       install_requires=[
           'setuptools',
           # -*- Extra requirements: -*-
+          'python-ldap',
+          'requests',
+          'sh',
+          'cfgparse'
       ],
       entry_points="""
       # -*- Entry points: -*-
