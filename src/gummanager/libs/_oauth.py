@@ -10,6 +10,7 @@ from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
 import tarfile
 from StringIO import StringIO
+from collections import OrderedDict
 
 
 
@@ -48,16 +49,27 @@ class OauthServer(object):
             return {}
         osiris = parse_ini_from(osiris_ini)
 
+        ldap_ini = self.remote_config_files[instance_name].get('ldap.ini', '')
+        if not ldap_ini:
+            return {}
+        ldap = parse_ini_from(ldap_ini)
+
         port_index = int(osiris['server:main']['port']) - OSIRIS_BASE_PORT
-        instance = {
-            'name': instance_name,
-            'port_index': port_index,
-            'mongo_database': osiris['app:main']['osiris.store.db'],
-            'server': 'http://{}:{}'.format(self.server, osiris['server:main']['port']),
-            'server_dns': 'https://{}/{}'.format(self.server_dns, instance_name),
-            'circus': 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index),
-            'circus_tcp': 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index),
+
+        instance = OrderedDict()
+        instance['name'] = instance_name
+        instance['port_index'] = port_index
+        instance['mongo_database'] = osiris['app:main']['osiris.store.db']
+        instance['server'] = {
+            'direct': 'http://{}:{}'.format(self.server, osiris['server:main']['port']),
+            'dns': 'https://{}/{}'.format(self.server_dns, instance_name)
         }
+        instance['ldap'] = {
+            'server': ldap['ldap']['server'],
+            'basedn': ','.join(ldap['ldap']['userbasedn'])
+        }
+        instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
+        instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
 
         return instance
 
