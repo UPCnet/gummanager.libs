@@ -91,7 +91,7 @@ class MaxServer(object):
 
         print ' > bootstraping buildout'
         # Bootstrap instance
-        code, stdout = self.ssh('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
+        code, stdout = self.ssh('cd {} && {} bootstrap.py -c max-only.cfg'.format(
             new_instance_folder,
             self.python_interpreter)
         )  
@@ -126,32 +126,16 @@ class MaxServer(object):
         if code != 0:
             return None
 
-        print ' > generating ldap.ini'
-        # Configure ldap.ini
-        ldapini = configure_ini(
-            string=LDAP_INI,
-            params={
-                'ldap': {
-                    'server': self.ldap_config['server'],
-                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(instance_name),
-                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(instance_name),
-                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(instance_name)
-                }
-            }
-        )
+        # # Adding nginx entry
 
-        code, stdout = self.ssh("cat > {}/config/ldap.ini".format(new_instance_folder),_in=ldapini)
+        # nginx_params = {
+        #     'instance_name': instance_name,
+        #     'server_dns': self.server_dns,
+        #     'osiris_port': int(port_index) + OSIRIS_BASE_PORT
+        # }
+        # nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        # Adding nginx entry
-
-        nginx_params = {
-            'instance_name': instance_name,
-            'server_dns': self.server_dns,
-            'osiris_port': int(port_index) + OSIRIS_BASE_PORT
-        }
-        nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
-
-        code, stdout = self.ssh("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
+        # code, stdout = self.ssh("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
 
         print ' > generating init.d script'
         # Configure startup script
@@ -172,7 +156,7 @@ class MaxServer(object):
 
         print ' > executing buildout'
         # Execute buildout
-        code, stdout = self.ssh('cd {} && ./bin/buildout -c osiris-only.cfg'.format(
+        code, stdout = self.ssh('cd {} && ./bin/buildout -c max-only.cfg'.format(
             new_instance_folder)
         )  
 
