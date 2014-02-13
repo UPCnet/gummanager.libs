@@ -25,7 +25,7 @@ def parse_ini_from(string=None, filename=None, url=None, params={}):
         text = string
 
     input_config = StringIO(text)
-    return ConfigObj(input_config, encoding="utf-8")
+    return ConfigObj(input_config, encoding="utf-8", list_values=False)
 
         
 def configure_ini(string=None, filename=None, url=None, params={}):

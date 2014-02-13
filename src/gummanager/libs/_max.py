@@ -4,6 +4,7 @@ from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
+from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
@@ -11,7 +12,6 @@ from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 import tarfile
 from StringIO import StringIO
 from collections import OrderedDict
-
 
 
 class MaxServer(object):
@@ -44,30 +44,23 @@ class MaxServer(object):
         return instances
 
     def get_instance(self, instance_name):
-        osiris_ini = self.remote_config_files[instance_name].get('osiris.ini', '')
-        if not osiris_ini:
+        max_ini = self.remote_config_files[instance_name].get('max.ini', '')
+        if not max_ini:
             return {}
-        osiris = parse_ini_from(osiris_ini)
 
-        ldap_ini = self.remote_config_files[instance_name].get('ldap.ini', '')
-        if not ldap_ini:
-            return {}
-        ldap = parse_ini_from(ldap_ini)
+        maxconfig = parse_ini_from(max_ini)
 
-        port_index = int(osiris['server:main']['port']) - OSIRIS_BASE_PORT
+        port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
 
         instance = OrderedDict()
         instance['name'] = instance_name
         instance['port_index'] = port_index
-        instance['mongo_database'] = osiris['app:main']['osiris.store.db']
+        instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
         instance['server'] = {
-            'direct': 'http://{}:{}'.format(self.server, osiris['server:main']['port']),
-            'dns': 'https://{}/{}'.format(self.server_dns, instance_name)
+            'direct': 'http://{}:{}'.format(self.server, maxconfig['server:main']['port']),
+            'dns': maxconfig['app:main']['max.server']
         }
-        instance['ldap'] = {
-            'server': ldap['ldap']['server'],
-            'basedn': ','.join(ldap['ldap']['userbasedn'])
-        }
+        instance['oauth'] = maxconfig['app:main']['max.oauth_server']
         instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
         instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
 

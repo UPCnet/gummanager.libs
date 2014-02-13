@@ -66,7 +66,7 @@ class OauthServer(object):
         }
         instance['ldap'] = {
             'server': ldap['ldap']['server'],
-            'basedn': ','.join(ldap['ldap']['userbasedn'])
+            'basedn': ldap['ldap']['userbasedn']
         }
         instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
         instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
