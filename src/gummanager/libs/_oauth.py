@@ -149,6 +149,15 @@ class OauthServer(object):
 
         code, stdout = self.ssh("cat > {}/config/ldap.ini".format(new_instance_folder),_in=ldapini)
 
+        
+        # Create log folder
+        print ' > creating log folder'
+        code, stdout = self.ssh("mkdir -p {}/var/log".format(new_instance_folder))
+
+        if code != 0:
+            return None
+
+
         # Adding nginx entry
 
         nginx_params = {
