@@ -38,6 +38,7 @@ setup(name='gummanager.libs',
           # -*- Extra requirements: -*-
           'python-ldap',
           'requests',
+          'pyquery',
           'sh',
           'configobj',
           'circus',
