@@ -49,3 +49,6 @@ OSIRIS_NGINX_ENTRY = """
         proxy_pass   http://{server_dns}:{osiris_port};
     }}
 """
+
+MAX_NGINX_ENTRY = """
+"""

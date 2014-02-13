@@ -2,6 +2,9 @@ from sh import ssh
 import requests
 from StringIO import StringIO
 from configobj import ConfigObj
+from circus.client import CircusClient
+import datetime
+import humanize
 
 class SSH(object):
     def __init__(self, user, server):
@@ -41,3 +44,25 @@ def configure_ini(string=None, filename=None, url=None, params={}):
     out.seek(0)
     return out.read().replace('"', '')
 
+
+def circus_status(endpoint=None, process=None):
+    default = {
+        'pid': 'unknown',
+        'status': 'unknown',
+        'uptime': 'unknown'
+    }
+
+    if endpoint and process:
+        client = CircusClient(endpoint=endpoint, timeout=2)
+        try:
+            status = client.send_message('status')
+            stats = client.send_message('stats')
+            # Assuming here there's only a process
+            pid = stats['infos'][process].keys()[0]
+            uptime = int(stats['infos'][process][pid]['age'])
+            default['pid'] = pid
+            default['status'] = status['statuses'][process]
+            default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.timedelta(seconds=uptime))
+        except:
+            pass
+    return default

@@ -1,13 +1,14 @@
 from gummanager.libs.utils import SSH
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
+from gummanager.libs.utils import circus_status
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
-from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
+from gummanager.libs.config_files import MAX_NGINX_ENTRY
 
 import tarfile
 from StringIO import StringIO
@@ -42,6 +43,21 @@ class MaxServer(object):
             if instance:
                 instances.append(instance)
         return instances
+
+    def get_status(self, instance_name):
+        instance = self.get_instance(instance_name)
+        status = circus_status(
+            endpoint=instance['circus_tcp'],
+            process='osiris'
+            )
+
+        result_status = OrderedDict()
+        result_status['name'] = instance_name
+        result_status['server'] = instance['server']
+        result_status['status'] = status['status']
+        result_status['pid'] = status['pid']
+        result_status['uptime'] = status['uptime']
+        return result_status
 
     def get_instance(self, instance_name):
         max_ini = self.remote_config_files[instance_name].get('max.ini', '')
