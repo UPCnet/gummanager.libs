@@ -39,9 +39,9 @@ setup(name='gummanager.libs',
           'python-ldap',
           'requests',
           'sh',
-          'cfgparse',
+          'configobj',
           'circus',
-          'humanize'
+          'humanize',
       ],
       entry_points="""
       # -*- Entry points: -*-
