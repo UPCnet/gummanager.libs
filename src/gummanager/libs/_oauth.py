@@ -8,35 +8,45 @@ from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
-import re
+import tarfile
+from StringIO import StringIO
 
 
 
 class OauthServer(object):
+    _remote_config_files = {}
     def __init__(self, *args, **kwargs):
         for k,v in kwargs.items():
             setattr(self, k, v)
 
         self.ssh = SSH(self.ssh_user, self.server)
 
+    @property
+    def remote_config_files(self):
+        if not self._remote_config_files:
+            code, stdout = self.ssh('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
+            tar = tarfile.open(mode= "r:", fileobj = StringIO(stdout))
+            for taredfile in tar.members:
+                instance_name, config, filename = taredfile.name.strip('./').split('/')
+                self._remote_config_files.setdefault(instance_name, {})
+                extracted_file = tar.extractfile(taredfile.name)
+                self._remote_config_files[instance_name][filename] = extracted_file.read()
+        return self._remote_config_files
+
+
     def get_instances(self):
-        code, stdout = self.ssh('ls {}'.format(self.instances_root))
-        instances_names = re.findall('(\w+)\n*', stdout)
         instances = []
-        for instance_name in instances_names:
+        for instance_name in self.remote_config_files:
             instance = self.get_instance(instance_name)
             if instance:
                 instances.append(instance)
         return instances
 
     def get_instance(self, instance_name):
-        code, stdout = self.ssh('cat {}/{}/config/osiris.ini'.format(
-            self.instances_root,
-            instance_name)
-        )
-        if code is None:
+        osiris_ini = self.remote_config_files[instance_name].get('osiris.ini', '')
+        if not osiris_ini:
             return {}
-        osiris = parse_ini_from(stdout)
+        osiris = parse_ini_from(osiris_ini)
 
         port_index = int(osiris['server:main']['port']) - OSIRIS_BASE_PORT
         instance = {
