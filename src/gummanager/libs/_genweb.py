@@ -43,7 +43,6 @@ class GenwebServer(object):
             current_mountpoint = None
             for tr in rows:
                 ptr = PyQuery(tr)
-                print ptr.find('td a')[-1].text
                 is_mountpoint = ptr.find('img[alt=Folder]')
                 is_plone = ptr.find('img[alt="Plone Site"]') and len(ptr.find('td')) == 3
                 if is_mountpoint:
