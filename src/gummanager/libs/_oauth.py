@@ -1,8 +1,8 @@
-from gummanager.libs.utils import SSH
+from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import circus_status
-from gummanager.libs.utils import padded_log, progress_log
+from gummanager.libs.utils import padded_log, progress_log, padded_success, padded_error
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
@@ -21,12 +21,12 @@ class OauthServer(object):
         for k,v in kwargs.items():
             setattr(self, k, v)
 
-        self.ssh = SSH(self.ssh_user, self.server)
+        self.remote = RemoteConnection(self.ssh_user, self.server)
 
     @property
     def remote_config_files(self):
         if not self._remote_config_files:
-            code, stdout = self.ssh('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
+            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
             tar = tarfile.open(mode= "r:", fileobj = StringIO(stdout))
             for taredfile in tar.members:
                 instance_name, config, filename = taredfile.name.strip('./').split('/')
@@ -102,31 +102,59 @@ class OauthServer(object):
             self.instances_root, 
             instance_name
         )
-        
-        # Clone buildout repository
+        print
+        print "Adding a new osiris OAuth server named `{}` on server {} ".format(instance_name, self.server)
+
+        ###########################################################################################
         progress_log('Cloning buildout')
-        code, stdout = self.ssh('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+
+        if self.remote.file_exists('{}'.format(new_instance_folder)):
+            padded_error('Folder {} already exists'.format(new_instance_folder))
+            return None
+
+        code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             repo_url, 
             new_instance_folder)
         )
 
         padded_log(stdout)
 
-        if code != 0 or 'Cloning into' not in stdout:
+        if code != 0:
+            padded_error('Error when cloning repo')
             return None
 
-        progress_log('bootstraping buildout')
-        # Bootstrap instance
-        code, stdout = self.ssh('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
+        if self.remote.file_exists('{}/bootstrap.py'.format(new_instance_folder)):
+            padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
+        else:
+            padded_error('Error when cloning repo')
+            return None
+
+
+        
+        ###########################################################################################
+
+        progress_log('Bootstraping buildout')
+        code, stdout = self.remote.execute('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
             new_instance_folder,
             self.python_interpreter)
         )  
+        padded_log(stdout)
 
-        if code != 0 or 'Generated script' not in stdout:
+        if code != 0:
+            padded_error('Error on bootstraping')
             return None
 
-        progress_log('configuring customizeme.cfg')
-        # Configure customizeme.cfg
+        if self.remote.file_exists('{}/bin/buildout'.format(new_instance_folder)):
+            padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
+        else:
+            padded_error('Error on bootstraping')
+            return None
+
+
+        
+        ###########################################################################################
+
+        progress_log('Configuring customizeme.cfg')
         port_index = '07'
 
         customizations = {
@@ -147,13 +175,21 @@ class OauthServer(object):
             url='https://raw.github.com/UPCnet/maxserver/master/customizeme.cfg',
             params=customizations)
         
-        code, stdout = self.ssh("cat > {}/customizeme.cfg".format(new_instance_folder),_in=customizeme)
+        success = self.remote.put_file("{}/customizeme.cfg".format(new_instance_folder), customizeme)
 
         if code != 0:
+            padded_error('Error on applying settings on customizeme.cfg')
             return None
 
-        progress_log('generating ldap.ini')
-        # Configure ldap.ini
+        if success:
+            padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
+        else:
+            padded_error('Error on applying settings on customizeme.cfg')
+            return None        
+
+        ###########################################################################################
+
+        progress_log('Generating ldap.ini')
         ldapini = configure_ini(
             string=LDAP_INI,
             params={
@@ -166,18 +202,52 @@ class OauthServer(object):
             }
         )
 
-        code, stdout = self.ssh("cat > {}/config/ldap.ini".format(new_instance_folder),_in=ldapini)
+        success = self.remote.put_file("{}/config/ldap.ini".format(new_instance_folder), ldapini)
 
-        
-        # Create log folder
-        progress_log('creating log folder')
-        code, stdout = self.ssh("mkdir -p {}/var/log".format(new_instance_folder))
+        if success:
+            padded_success('Succesfully created {}/config/ldap.ini'.format(new_instance_folder))
+        else:
+            padded_error('Error when generating ldap.ini')
+            return None        
 
-        if code != 0:
-            return None
+        ###########################################################################################
+
+        progress_log('Creating log folder')
+        code, stdout = self.remote.execute("mkdir -p {}/var/log".format(new_instance_folder))
+
+        if code == 0:
+            padded_success('Succesfully created {}/var/log folder'.format(new_instance_folder))
+        else:
+            padded_error('Error creating log folder')
+            return None        
+
+        ###########################################################################################
+
+        progress_log('Creating nginx entry')
+        nginx_params = {
+            'instance_name': instance_name,
+            'server_dns': self.server_dns,
+            'osiris_port': int(port_index) + OSIRIS_BASE_PORT
+        }
+        nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
+
+        success = self.remote.put_file("{}/config/osiris-instances/{}".format(self.nginx_root, instance_name), nginxentry)
+
+        if success:
+            padded_success("Succesfully created {}/config/osiris-instances/{}".format(self.nginx_root, instance_name))
+        else:
+            padded_error('Error when generating nginx config file')
+            return None    
 
 
-        # Adding nginx entry
+        ###########################################################################################
+
+        progress_log('Generating init.d script')        
+        initd_params = {
+            'port_index': port_index,
+            'instance_folder': new_instance_folder
+        }
+        initd_script = INIT_D_SCRIPT.format(**initd_params)
 
         nginx_params = {
             'instance_name': instance_name,
@@ -186,42 +256,41 @@ class OauthServer(object):
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        code, stdout = self.ssh("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
+        success = self.remote.put_file("/etc/init.d/oauth_{}".format(instance_name), nginxentry)
 
-        progress_log('generating init.d script')
-        # Configure startup script
-        initd_params = {
-            'port_index': port_index,
-            'instance_folder': new_instance_folder
-        }
-        initd_script = INIT_D_SCRIPT.format(**initd_params)
-        code, stdout = self.ssh("cat > /etc/init.d/oauth_{}".format(instance_name),_in=initd_script)
+        code, stdout = self.remote.execute("chmod +x /etc/init.d/oauth_{}".format(instance_name))
         if code != 0:
-            return None
-        code, stdout = self.ssh("chmod +x /etc/init.d/oauth_{}".format(instance_name))
+            success = False
+
+        code, stdout = self.remote.execute("update-rc.d oauth_{} defaults".format(instance_name))
         if code != 0:
-            return None
-        code, stdout = self.ssh("update-rc.d oauth_{} defaults".format(instance_name))
-        if code != 0:
-            return None
+            success = False
+
+        if success:
+            padded_success("Succesfully created /etc/init.d/oauth_{}".format(instance_name))
+        else:
+            padded_error('Error when generating init.d script')
+            return None    
         
-        progress_log('executing buildout')
-        # Execute buildout
+        ###########################################################################################
 
+        progress_log('Executing buildout')
         current_progress = [0, '']
 
         def buildout_log(string):
-            current_progress[0] +=  1
-            current_progress[1] = padded_log(
+            padded_log(
                 string, 
-                filters=['Installing'], 
-                progress=(current_progress[0], 875, current_progress[1]))
+                filters=['Installing', 'Generated', 'Got'])
 
-        code, stdout = self.ssh(
+        code, stdout = self.remote.execute(
             'cd {} && ./bin/buildout -c osiris-only.cfg'.format(new_instance_folder),
             _out=buildout_log
         )  
 
         if code != 0:
+            padded_error("Error on buildout execution")
             return None
+        else:
+            padded_success("Succesfully created a new oauth instance")
+
 

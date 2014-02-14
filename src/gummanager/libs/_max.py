@@ -1,4 +1,4 @@
-from gummanager.libs.utils import SSH
+from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import circus_status
@@ -21,12 +21,12 @@ class MaxServer(object):
         for k,v in kwargs.items():
             setattr(self, k, v)
 
-        self.ssh = SSH(self.ssh_user, self.server)
+        self.remote = RemoteConnection(self.ssh_user, self.server)
 
     @property
     def remote_config_files(self):
         if not self._remote_config_files:
-            code, stdout = self.ssh('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
+            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
             tar = tarfile.open(mode= "r:", fileobj = StringIO(stdout))
             for taredfile in tar.members:
                 instance_name, config, filename = taredfile.name.strip('./').split('/')
@@ -97,7 +97,7 @@ class MaxServer(object):
         
         # Clone buildout repository
         print ' > cloning buildout'
-        code, stdout = self.ssh('git clone {} {}'.format(
+        code, stdout = self.remote.execute('git clone {} {}'.format(
             repo_url, 
             new_instance_folder)
         )
@@ -107,7 +107,7 @@ class MaxServer(object):
 
         print ' > bootstraping buildout'
         # Bootstrap instance
-        code, stdout = self.ssh('cd {} && {} bootstrap.py -c max-only.cfg'.format(
+        code, stdout = self.remote.execute('cd {} && {} bootstrap.py -c max-only.cfg'.format(
             new_instance_folder,
             self.python_interpreter)
         )  
@@ -137,7 +137,7 @@ class MaxServer(object):
             url='https://raw.github.com/UPCnet/maxserver/master/customizeme.cfg',
             params=customizations)
         
-        code, stdout = self.ssh("cat > {}/customizeme.cfg".format(new_instance_folder),_in=customizeme)
+        code, stdout = self.remote.execute("cat > {}/customizeme.cfg".format(new_instance_folder),_in=customizeme)
 
         if code != 0:
             return None
@@ -151,7 +151,7 @@ class MaxServer(object):
         # }
         # nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        # code, stdout = self.ssh("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
+        # code, stdout = self.remote.execute("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
 
         print ' > generating init.d script'
         # Configure startup script
@@ -160,19 +160,19 @@ class MaxServer(object):
             'instance_folder': new_instance_folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
-        code, stdout = self.ssh("cat > /etc/init.d/oauth_{}".format(instance_name),_in=initd_script)
+        code, stdout = self.remote.execute("cat > /etc/init.d/oauth_{}".format(instance_name),_in=initd_script)
         if code != 0:
             return None
-        code, stdout = self.ssh("chmod +x /etc/init.d/oauth_{}".format(instance_name))
+        code, stdout = self.remote.execute("chmod +x /etc/init.d/oauth_{}".format(instance_name))
         if code != 0:
             return None
-        code, stdout = self.ssh("update-rc.d oauth_{} defaults".format(instance_name))
+        code, stdout = self.remote.execute("update-rc.d oauth_{} defaults".format(instance_name))
         if code != 0:
             return None
 
         print ' > executing buildout'
         # Execute buildout
-        code, stdout = self.ssh('cd {} && ./bin/buildout -c max-only.cfg'.format(
+        code, stdout = self.remote.execute('cd {} && ./bin/buildout -c max-only.cfg'.format(
             new_instance_folder)
         )  
 

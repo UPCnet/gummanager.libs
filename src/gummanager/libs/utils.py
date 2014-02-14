@@ -1,4 +1,4 @@
-from sh import ssh
+from sh import ssh, ErrorReturnCode
 import requests
 from StringIO import StringIO
 from configobj import ConfigObj
@@ -10,51 +10,61 @@ import sys
 from blessings import Terminal
 term = Terminal()
 
-class SSH(object):
+class RemoteConnection(object):
     def __init__(self, user, server):
         self.ssh = ssh.bake('{}@{}'.format(user, server))
 
-    def __call__(self, command, **kwargs):
+    def execute(self, command, **kwargs):
         try:
             result = self.ssh(command, **kwargs)
         except:
-            result = self.ssh(command, **kwargs)
             return None, ''
 
         return result.exit_code, result.stdout
 
+    def file_exists(self, filename):
+        try:
+            result = self.ssh('ls {}'.format(filename))
+        except ErrorReturnCode:
+            return False
+        return True
 
-def padded_log(ostring, filters=[], progress=None):
-    ostring = ostring.rstrip('\n')
-    string = str(ostring)
+    def get_file(self, filename):
+        try:
+            result = self.ssh('cat {}'.format(filename))
+        except ErrorReturnCode:
+            return None
+        return result.stdout
+
+    def put_file(self, filename, content):
+        try:
+            result = self.ssh("cat > {}".format(filename),_in=content)
+        except ErrorReturnCode:
+            return None
+        # if successfull check back content of file
+        return self.get_file(filename) == content
+
+
+def padded_success(string):
+    print term.bold_green + '    {}'.format(string) + term.normal
+
+def padded_error(string):
+    print term.bold_red + '    {}\n'.format(string) + term.normal
+
+def padded_log(string, filters=[]):
+    string = string.rstrip()
     matched_filter = re.search(r'({})'.format('|'.join(filters)), string)
-    do_print = matched_filter or not filters or progress
+    do_print = matched_filter or filters == []
+    # we have a multiline
+    line = re.sub(r'([\n\r])', r'\1    ', string)
     if do_print:
-        percent = ''
-        if progress:
-            current, total, last = progress
-            percent = '{:>3}%           '.format((current * 100) / total)
-
-        if not matched_filter and progress:
-            string = last
-        
-        line = (term.normal + '    ' + re.sub(r'([\n\r])', r'\1%s    ' % (percent), string)) + term.normal
-        if progress:
-            current, total, last = progress
-            line = '\r' + line
-            if string != last:
-                line += '\n'
-        else:
-            line = line + '\n'
-
-        sys.stdout.write(line)
-        sys.stdout.flush()
-
-    return string
-
+        print '    ' + line.rstrip()
+    
 
 def progress_log(string):
+    print
     print term.bold_cyan + '> {}'.format(string) + term.normal
+    print
 
 
 def parse_ini_from(string=None, filename=None, url=None, params={}):

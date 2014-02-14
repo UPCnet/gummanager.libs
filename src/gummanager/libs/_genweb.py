@@ -1,4 +1,3 @@
-from gummanager.libs.utils import SSH
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import circus_status
