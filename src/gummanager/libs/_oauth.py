@@ -2,6 +2,7 @@ from gummanager.libs.utils import SSH
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import circus_status
+from gummanager.libs.utils import padded_log, progress_log
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
@@ -103,16 +104,18 @@ class OauthServer(object):
         )
         
         # Clone buildout repository
-        print ' > cloning buildout'
-        code, stdout = self.ssh('git clone {} {}'.format(
+        progress_log('Cloning buildout')
+        code, stdout = self.ssh('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             repo_url, 
             new_instance_folder)
         )
 
+        padded_log(stdout)
+
         if code != 0 or 'Cloning into' not in stdout:
             return None
 
-        print ' > bootstraping buildout'
+        progress_log('bootstraping buildout')
         # Bootstrap instance
         code, stdout = self.ssh('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
             new_instance_folder,
@@ -122,7 +125,7 @@ class OauthServer(object):
         if code != 0 or 'Generated script' not in stdout:
             return None
 
-        print ' > configuring customizeme.cfg'
+        progress_log('configuring customizeme.cfg')
         # Configure customizeme.cfg
         port_index = '07'
 
@@ -149,7 +152,7 @@ class OauthServer(object):
         if code != 0:
             return None
 
-        print ' > generating ldap.ini'
+        progress_log('generating ldap.ini')
         # Configure ldap.ini
         ldapini = configure_ini(
             string=LDAP_INI,
@@ -167,7 +170,7 @@ class OauthServer(object):
 
         
         # Create log folder
-        print ' > creating log folder'
+        progress_log('creating log folder')
         code, stdout = self.ssh("mkdir -p {}/var/log".format(new_instance_folder))
 
         if code != 0:
@@ -185,7 +188,7 @@ class OauthServer(object):
 
         code, stdout = self.ssh("cat >> {}/config/osiris-instances.ini".format(self.nginx_root),_in=nginxentry)
 
-        print ' > generating init.d script'
+        progress_log('generating init.d script')
         # Configure startup script
         initd_params = {
             'port_index': port_index,
@@ -201,11 +204,22 @@ class OauthServer(object):
         code, stdout = self.ssh("update-rc.d oauth_{} defaults".format(instance_name))
         if code != 0:
             return None
-
-        print ' > executing buildout'
+        
+        progress_log('executing buildout')
         # Execute buildout
-        code, stdout = self.ssh('cd {} && ./bin/buildout -c osiris-only.cfg'.format(
-            new_instance_folder)
+
+        current_progress = [0, '']
+
+        def buildout_log(string):
+            current_progress[0] +=  1
+            current_progress[1] = padded_log(
+                string, 
+                filters=['Installing'], 
+                progress=(current_progress[0], 875, current_progress[1]))
+
+        code, stdout = self.ssh(
+            'cd {} && ./bin/buildout -c osiris-only.cfg'.format(new_instance_folder),
+            _out=buildout_log
         )  
 
         if code != 0:

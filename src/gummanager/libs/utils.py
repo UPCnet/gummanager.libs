@@ -5,6 +5,10 @@ from configobj import ConfigObj
 from circus.client import CircusClient
 import datetime
 import humanize
+import re
+import sys
+from blessings import Terminal
+term = Terminal()
 
 class SSH(object):
     def __init__(self, user, server):
@@ -14,9 +18,43 @@ class SSH(object):
         try:
             result = self.ssh(command, **kwargs)
         except:
+            result = self.ssh(command, **kwargs)
             return None, ''
 
         return result.exit_code, result.stdout
+
+
+def padded_log(ostring, filters=[], progress=None):
+    ostring = ostring.rstrip('\n')
+    string = str(ostring)
+    matched_filter = re.search(r'({})'.format('|'.join(filters)), string)
+    do_print = matched_filter or not filters or progress
+    if do_print:
+        percent = ''
+        if progress:
+            current, total, last = progress
+            percent = '{:>3}%           '.format((current * 100) / total)
+
+        if not matched_filter and progress:
+            string = last
+        
+        line = (term.normal + '    ' + re.sub(r'([\n\r])', r'\1%s    ' % (percent), string)) + term.normal
+        if progress:
+            current, total, last = progress
+            line = '\r' + line
+            if string != last:
+                line += '\n'
+        else:
+            line = line + '\n'
+
+        sys.stdout.write(line)
+        sys.stdout.flush()
+
+    return string
+
+
+def progress_log(string):
+    print term.bold_cyan + '> {}'.format(string) + term.normal
 
 
 def parse_ini_from(string=None, filename=None, url=None, params={}):
