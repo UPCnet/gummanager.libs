@@ -1,15 +1,17 @@
+import base64
+import hashlib
 import ldap
 import ldap.modlist as modlist
-import base64, hashlib, os
+import os
 
 
 class LdapServer(object):
     def __init__(self, *args, **kwargs):
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
-        self.ldap_uri = '{server}:{port}'.format(**kwargs)   
-        self.leaf_dn = ''    
+        self.ldap_uri = '{server}:{port}'.format(**kwargs)
+        self.leaf_dn = ''
 
     def connect(self):
         self.ld = ldap.initialize(self.ldap_uri)
@@ -35,11 +37,10 @@ class LdapServer(object):
         dn = 'ou={},{}'.format(ou_name, self.dn)
 
         ldif = modlist.addModlist({
-            'objectclass': ['top','organizationalUnit'],
+            'objectclass': ['top', 'organizationalUnit'],
             'ou': ou_name,
             'description': ou_name
-            }
-        )
+        })
         self.ld.add_s(dn, ldif)
 
     def ssha(self, password):
@@ -51,12 +52,11 @@ class LdapServer(object):
         dn = 'cn={},{}'.format(user_name, self.dn)
 
         ldif = modlist.addModlist({
-            'objectclass': ['top','organizationalPerson', 'person', 'inetOrgPerson'],
+            'objectclass': ['top', 'organizationalPerson', 'person', 'inetOrgPerson'],
             'cn': user_name,
             'sn': display_name,
             'userPassword': self.ssha(password)
-            }
-        )
+        })
 
         self.ld.add_s(dn, ldif)
 
@@ -67,10 +67,17 @@ class LdapServer(object):
         members.append('cn={},{}'.format('ldap', self.dn))
 
         ldif = modlist.addModlist({
-            'objectclass': ['top','groupOfNames'],
+            'objectclass': ['top', 'groupOfNames'],
             'cn': group_name,
             'member': members
-            }
-        )
-
+        })
         self.ld.add_s(dn, ldif)
+
+    def addBranch(self, branch_name):
+        self.addOU(branch_name)
+        self.cd('ou={}'.format(branch_name))
+        self.addUser('ldap', 'LDAP Access User', 'secret')
+        self.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
+        self.addGroup('Managers')
+        self.addOU('groups')
+        self.addOU('users')
