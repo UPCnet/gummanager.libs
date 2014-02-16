@@ -17,8 +17,9 @@ from collections import OrderedDict
 
 class OauthServer(object):
     _remote_config_files = {}
+
     def __init__(self, *args, **kwargs):
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
         self.remote = RemoteConnection(self.ssh_user, self.server)
@@ -27,14 +28,13 @@ class OauthServer(object):
     def remote_config_files(self):
         if not self._remote_config_files:
             code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
-            tar = tarfile.open(mode= "r:", fileobj = StringIO(stdout))
+            tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
             for taredfile in tar.members:
                 instance_name, config, filename = taredfile.name.strip('./').split('/')
                 self._remote_config_files.setdefault(instance_name, {})
                 extracted_file = tar.extractfile(taredfile.name)
                 self._remote_config_files[instance_name][filename] = extracted_file.read()
         return self._remote_config_files
-
 
     def get_instances(self):
         instances = []
@@ -49,7 +49,7 @@ class OauthServer(object):
         status = circus_status(
             endpoint=instance['circus_tcp'],
             process='osiris'
-            )
+        )
 
         result_status = OrderedDict()
         result_status['name'] = instance_name
@@ -58,7 +58,6 @@ class OauthServer(object):
         result_status['pid'] = status['pid']
         result_status['uptime'] = status['uptime']
         return result_status
-
 
     def get_instance(self, instance_name):
         osiris_ini = self.remote_config_files[instance_name].get('osiris.ini', '')
@@ -99,7 +98,7 @@ class OauthServer(object):
     def new_instance(self, instance_name):
         repo_url = 'https://github.com/UPCnet/maxserver'
         new_instance_folder = '{}/{}'.format(
-            self.instances_root, 
+            self.instances_root,
             instance_name
         )
         print
@@ -113,7 +112,7 @@ class OauthServer(object):
             return None
 
         code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
-            repo_url, 
+            repo_url,
             new_instance_folder)
         )
 
@@ -129,15 +128,13 @@ class OauthServer(object):
             padded_error('Error when cloning repo')
             return None
 
-
-        
         ###########################################################################################
 
         progress_log('Bootstraping buildout')
         code, stdout = self.remote.execute('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
             new_instance_folder,
             self.python_interpreter)
-        )  
+        )
         padded_log(stdout)
 
         if code != 0:
@@ -150,8 +147,6 @@ class OauthServer(object):
             padded_error('Error on bootstraping')
             return None
 
-
-        
         ###########################################################################################
 
         progress_log('Configuring customizeme.cfg')
@@ -174,7 +169,7 @@ class OauthServer(object):
         customizeme = configure_ini(
             url='https://raw.github.com/UPCnet/maxserver/master/customizeme.cfg',
             params=customizations)
-        
+
         success = self.remote.put_file("{}/customizeme.cfg".format(new_instance_folder), customizeme)
 
         if code != 0:
@@ -185,7 +180,7 @@ class OauthServer(object):
             padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
         else:
             padded_error('Error on applying settings on customizeme.cfg')
-            return None        
+            return None
 
         ###########################################################################################
 
@@ -208,7 +203,7 @@ class OauthServer(object):
             padded_success('Succesfully created {}/config/ldap.ini'.format(new_instance_folder))
         else:
             padded_error('Error when generating ldap.ini')
-            return None        
+            return None
 
         ###########################################################################################
 
@@ -219,7 +214,7 @@ class OauthServer(object):
             padded_success('Succesfully created {}/var/log folder'.format(new_instance_folder))
         else:
             padded_error('Error creating log folder')
-            return None        
+            return None
 
         ###########################################################################################
 
@@ -237,26 +232,18 @@ class OauthServer(object):
             padded_success("Succesfully created {}/config/osiris-instances/{}".format(self.nginx_root, instance_name))
         else:
             padded_error('Error when generating nginx config file')
-            return None    
-
+            return None
 
         ###########################################################################################
 
-        progress_log('Generating init.d script')        
+        progress_log('Generating init.d script')
         initd_params = {
             'port_index': port_index,
             'instance_folder': new_instance_folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
 
-        nginx_params = {
-            'instance_name': instance_name,
-            'server_dns': self.server_dns,
-            'osiris_port': int(port_index) + OSIRIS_BASE_PORT
-        }
-        nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
-
-        success = self.remote.put_file("/etc/init.d/oauth_{}".format(instance_name), nginxentry)
+        success = self.remote.put_file("/etc/init.d/oauth_{}".format(instance_name), initd_script)
 
         code, stdout = self.remote.execute("chmod +x /etc/init.d/oauth_{}".format(instance_name))
         if code != 0:
@@ -270,27 +257,24 @@ class OauthServer(object):
             padded_success("Succesfully created /etc/init.d/oauth_{}".format(instance_name))
         else:
             padded_error('Error when generating init.d script')
-            return None    
-        
+            return None
+
         ###########################################################################################
 
         progress_log('Executing buildout')
-        current_progress = [0, '']
 
         def buildout_log(string):
             padded_log(
-                string, 
+                string,
                 filters=['Installing', 'Generated', 'Got'])
 
         code, stdout = self.remote.execute(
             'cd {} && ./bin/buildout -c osiris-only.cfg'.format(new_instance_folder),
             _out=buildout_log
-        )  
+        )
 
         if code != 0:
             padded_error("Error on buildout execution")
             return None
         else:
             padded_success("Succesfully created a new oauth instance")
-
-
