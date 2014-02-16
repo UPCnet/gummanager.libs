@@ -28,12 +28,13 @@ class OauthServer(object):
     def remote_config_files(self):
         if not self._remote_config_files:
             code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
-            tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
-            for taredfile in tar.members:
-                instance_name, config, filename = taredfile.name.strip('./').split('/')
-                self._remote_config_files.setdefault(instance_name, {})
-                extracted_file = tar.extractfile(taredfile.name)
-                self._remote_config_files[instance_name][filename] = extracted_file.read()
+            if stdout:
+                tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
+                for taredfile in tar.members:
+                    instance_name, config, filename = taredfile.name.strip('./').split('/')
+                    self._remote_config_files.setdefault(instance_name, {})
+                    extracted_file = tar.extractfile(taredfile.name)
+                    self._remote_config_files[instance_name][filename] = extracted_file.read()
         return self._remote_config_files
 
     def get_instances(self):
@@ -89,20 +90,35 @@ class OauthServer(object):
 
         return instance
 
+    def instance_by_port_index(self, port_index):
+        instances = self.get_instances()
+        for instance in instances:
+            if instance['port_index'] == port_index:
+                return instance
+        return None
+
     def get_available_port(self):
         instances = self.get_instances()
         ports = [instance['port_index'] for instance in instances]
         ports.sort()
-        return ports[-1] + 1
+        return ports[-1] + 1 if ports else 1
 
-    def new_instance(self, instance_name):
+    def new_instance(self, instance_name, port_index, ldap_branch=None):
+
+        ldap_name = ldap_branch if ldap_branch is not None else instance_name
         repo_url = 'https://github.com/UPCnet/maxserver'
         new_instance_folder = '{}/{}'.format(
             self.instances_root,
             instance_name
         )
-        print
-        print "Adding a new osiris OAuth server named `{}` on server {} ".format(instance_name, self.server)
+        print """
+    Adding a new osiris OAuth server:
+        name: "{}"
+        server: "{}"
+        port_index: "{}"
+        ldap_branch: "{}"
+
+        """.format(instance_name, self.server, port_index, ldap_name)
 
         ###########################################################################################
         progress_log('Cloning buildout')
@@ -150,7 +166,6 @@ class OauthServer(object):
         ###########################################################################################
 
         progress_log('Configuring customizeme.cfg')
-        port_index = '07'
 
         customizations = {
             'hosts': {
@@ -190,9 +205,9 @@ class OauthServer(object):
             params={
                 'ldap': {
                     'server': self.ldap_config['server'],
-                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(instance_name),
-                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(instance_name),
-                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(instance_name)
+                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(ldap_name),
+                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(ldap_name),
+                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(ldap_name)
                 }
             }
         )
@@ -207,17 +222,6 @@ class OauthServer(object):
 
         ###########################################################################################
 
-        progress_log('Creating log folder')
-        code, stdout = self.remote.execute("mkdir -p {}/var/log".format(new_instance_folder))
-
-        if code == 0:
-            padded_success('Succesfully created {}/var/log folder'.format(new_instance_folder))
-        else:
-            padded_error('Error creating log folder')
-            return None
-
-        ###########################################################################################
-
         progress_log('Creating nginx entry')
         nginx_params = {
             'instance_name': instance_name,
@@ -226,10 +230,10 @@ class OauthServer(object):
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        success = self.remote.put_file("{}/config/osiris-instances/{}".format(self.nginx_root, instance_name), nginxentry)
+        success = self.remote.put_file("{}/config/osiris-instances/{}.conf".format(self.nginx_root, instance_name), nginxentry)
 
         if success:
-            padded_success("Succesfully created {}/config/osiris-instances/{}".format(self.nginx_root, instance_name))
+            padded_success("Succesfully created {}/config/osiris-instances/{}.conf".format(self.nginx_root, instance_name))
         else:
             padded_error('Error when generating nginx config file')
             return None
