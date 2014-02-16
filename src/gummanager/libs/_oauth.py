@@ -2,10 +2,12 @@ from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import circus_status
-from gummanager.libs.utils import padded_log, progress_log, padded_success, padded_error
+from gummanager.libs.utils import progress_log, padded_success, padded_error
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
+from gummanager.libs.buildout import RemoteBuildoutHelper
+
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
@@ -23,6 +25,7 @@ class OauthServer(object):
             setattr(self, k, v)
 
         self.remote = RemoteConnection(self.ssh_user, self.server)
+        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter)
 
     @property
     def remote_config_files(self):
@@ -111,6 +114,8 @@ class OauthServer(object):
             self.instances_root,
             instance_name
         )
+
+        self.buildout.folder = new_instance_folder
         print """
     Adding a new osiris OAuth server:
         name: "{}"
@@ -120,25 +125,16 @@ class OauthServer(object):
 
         """.format(instance_name, self.server, port_index, ldap_name)
 
-        ###########################################################################################
-        progress_log('Cloning buildout')
-
         if self.remote.file_exists('{}'.format(new_instance_folder)):
             padded_error('Folder {} already exists'.format(new_instance_folder))
             return None
 
-        code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
-            repo_url,
-            new_instance_folder)
-        )
+        ###########################################################################################
+        progress_log('Cloning buildout')
 
-        padded_log(stdout)
+        success = self.buildout.clone(repo_url)
 
-        if code != 0:
-            padded_error('Error when cloning repo')
-            return None
-
-        if self.remote.file_exists('{}/bootstrap.py'.format(new_instance_folder)):
+        if success:
             padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
         else:
             padded_error('Error when cloning repo')
@@ -147,17 +143,10 @@ class OauthServer(object):
         ###########################################################################################
 
         progress_log('Bootstraping buildout')
-        code, stdout = self.remote.execute('cd {} && {} bootstrap.py -c osiris-only.cfg'.format(
-            new_instance_folder,
-            self.python_interpreter)
-        )
-        padded_log(stdout)
 
-        if code != 0:
-            padded_error('Error on bootstraping')
-            return None
+        success = self.buildout.bootstrap('osiris-only.cfg')
 
-        if self.remote.file_exists('{}/bin/buildout'.format(new_instance_folder)):
+        if success:
             padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
         else:
             padded_error('Error on bootstraping')
@@ -181,15 +170,8 @@ class OauthServer(object):
             },
 
         }
-        customizeme = configure_ini(
-            url='https://raw.github.com/UPCnet/maxserver/master/customizeme.cfg',
-            params=customizations)
 
-        success = self.remote.put_file("{}/customizeme.cfg".format(new_instance_folder), customizeme)
-
-        if code != 0:
-            padded_error('Error on applying settings on customizeme.cfg')
-            return None
+        success = self.buildout.configure_file('customizeme.cfg', customizations)
 
         if success:
             padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
@@ -267,17 +249,8 @@ class OauthServer(object):
 
         progress_log('Executing buildout')
 
-        def buildout_log(string):
-            padded_log(
-                string,
-                filters=['Installing', 'Generated', 'Got'])
-
-        code, stdout = self.remote.execute(
-            'cd {} && ./bin/buildout -c osiris-only.cfg'.format(new_instance_folder),
-            _out=buildout_log
-        )
-
-        if code != 0:
+        success = self.buildout.execute()
+        if success:
             padded_error("Error on buildout execution")
             return None
         else:

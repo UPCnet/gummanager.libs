@@ -13,7 +13,9 @@ from _genweb import GenwebServer
 
 # Patch for sh to accept a partial as a argument
 
-def patched__init__(self, name, process, stream, handler, buffer, bufsize,
+
+def patched__init__(
+        self, name, process, stream, handler, buffer, bufsize,
         pipe_queue=None, save_data=True):
     self.name = name
     self.process = weakref.ref(process)
@@ -28,7 +30,8 @@ def patched__init__(self, name, process, stream, handler, buffer, bufsize,
 
     self.log = Logger("streamreader", repr(self))
 
-    self.stream_bufferer = StreamBufferer(self.encoding, bufsize,
+    self.stream_bufferer = StreamBufferer(
+        self.encoding, bufsize,
         self.decode_errors)
 
     # determine buffering
