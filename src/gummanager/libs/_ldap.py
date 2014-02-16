@@ -3,6 +3,7 @@ import hashlib
 import ldap
 import ldap.modlist as modlist
 import os
+from collections import OrderedDict
 
 
 class LdapServer(object):
@@ -74,10 +75,91 @@ class LdapServer(object):
         self.ld.add_s(dn, ldif)
 
     def addBranch(self, branch_name):
-        self.addOU(branch_name)
-        self.cd('ou={}'.format(branch_name))
-        self.addUser('ldap', 'LDAP Access User', 'secret')
-        self.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
-        self.addGroup('Managers')
-        self.addOU('groups')
-        self.addOU('users')
+        self.cd('/')
+        self.ld.addOU(branch_name)
+        self.ld.cd('ou={}'.format(branch_name))
+        self.ld.addUser('ldap', 'LDAP Access User', 'secret')
+        self.ld.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
+        self.ld.addGroup('Managers')
+        self.ld.addOU('groups')
+        self.ld.addOU('users')
+
+    def get_branch_users(self, branch_name):
+        self.cd('/')
+        self.cd('ou=users,ou={}'.format(branch_name))
+        try:
+            ldap_result_id = self.ld.search(
+                self.dn,
+                ldap.SCOPE_SUBTREE,
+                "cn=*",
+                None
+            )
+            result_set = []
+            while 1:
+                result_type, result_data = self.ld.result(ldap_result_id, 0)
+                if (result_data == []):
+                    break
+                else:
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        result_set.append({
+                            'name': result_data[0][1]['cn'][0],
+                            'sn': result_data[0][1]['sn'][0]
+                        })
+            return result_set
+        except ldap.LDAPError, e:
+            print e, branch_name
+
+    def get_branch_groups(self, branch_name):
+        self.cd('/')
+        self.cd('ou=groups,ou={}'.format(branch_name))
+        try:
+            ldap_result_id = self.ld.search(
+                self.dn,
+                ldap.SCOPE_SUBTREE,
+                "cn=*",
+                None
+            )
+            result_set = []
+            while 1:
+                result_type, result_data = self.ld.result(ldap_result_id, 0)
+                if (result_data == []):
+                    break
+                else:
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        result_set.append({
+                            'name': result_data[0][1]['cn'][0],
+                            'members': result_data[0][1]['member']
+                        })
+            return result_set
+        except ldap.LDAPError, e:
+            print e
+
+    def get_branch(self, branch_name):
+        groups = self.get_branch_groups(branch_name)
+        users = self.get_branch_users(branch_name)
+        instance = OrderedDict()
+        instance['name'] = branch_name
+        instance['groups'] = groups
+        instance['users'] = users
+        return instance
+
+    def get_branches(self):
+        try:
+            ldap_result_id = self.ld.search(
+                self.base_dn,
+                ldap.SCOPE_ONELEVEL,
+                "ou=*",
+                None
+            )
+            result_set = []
+            while 1:
+                result_type, result_data = self.ld.result(ldap_result_id, 0)
+                if (result_data == []):
+                    break
+                else:
+                    branch_name = result_data[0][1]['ou'][0]
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        result_set.append(self.get_branch(branch_name))
+            return result_set
+        except ldap.LDAPError, e:
+            print e
