@@ -11,6 +11,7 @@ from _oauth import OauthServer
 from _max import MaxServer
 from _genweb import GenwebServer
 
+# Patch for sh to accept a partial as a argument
 
 def patched__init__(self, name, process, stream, handler, buffer, bufsize,
         pipe_queue=None, save_data=True):
@@ -21,21 +22,21 @@ def patched__init__(self, name, process, stream, handler, buffer, bufsize,
     self.save_data = save_data
     self.encoding = process.call_args["encoding"]
     self.decode_errors = process.call_args["decode_errors"]
-    
+
     self.pipe_queue = None
     if pipe_queue: self.pipe_queue = weakref.ref(pipe_queue)
 
     self.log = Logger("streamreader", repr(self))
-    
+
     self.stream_bufferer = StreamBufferer(self.encoding, bufsize,
         self.decode_errors)
-    
+
     # determine buffering
     if bufsize == 1: self.bufsize = 1024
-    elif bufsize == 0: self.bufsize = 1 
+    elif bufsize == 0: self.bufsize = 1
     else: self.bufsize = bufsize
-    
-    
+
+
     # here we're determining the handler type by doing some basic checks
     # on the handler object
     self.handler = handler
@@ -45,10 +46,10 @@ def patched__init__(self, name, process, stream, handler, buffer, bufsize,
         self.handler_type = "cstringio"
     elif hasattr(handler, "write"): self.handler_type = "fd"
     else: self.handler_type = None
-    
-    
+
+
     self.should_quit = False
-    
+
     # here we choose how to call the callback, depending on how many
     # arguments it takes.  the reason for this is to make it as easy as
     # possible for people to use, without limiting them.  a new user will
@@ -60,11 +61,11 @@ def patched__init__(self, name, process, stream, handler, buffer, bufsize,
         if inspect.ismethod(handler):
             implied_arg = 1
             num_args = len(inspect.getargspec(handler).args)
-        
+
         else:
             if inspect.isfunction(handler):
                 num_args = len(inspect.getargspec(handler).args)
-                
+
             # is an object instance with __call__ method
             else:
                 if isinstance(handler, partial):
@@ -72,8 +73,8 @@ def patched__init__(self, name, process, stream, handler, buffer, bufsize,
                 else:
                     implied_arg = 1
                     num_args = len(inspect.getargspec(handler.__call__).args)
-            
-            
+
+
         self.handler_args = ()
         if num_args == implied_arg + 2:
             self.handler_args = (self.process().stdin,)
