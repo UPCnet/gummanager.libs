@@ -59,7 +59,7 @@ def padded_log(string, filters=[]):
     line = re.sub(r'([\n\r])', r'\1    ', string)
     if do_print:
         print '    ' + line.rstrip()
-    
+
 
 def progress_log(string):
     print
@@ -78,7 +78,7 @@ def parse_ini_from(string=None, filename=None, url=None, params={}):
     input_config = StringIO(text)
     return ConfigObj(input_config, encoding="utf-8", list_values=False)
 
-        
+
 def configure_ini(string=None, filename=None, url=None, params={}):
 
     config = parse_ini_from(string=string, filename=filename, url=url, params=params)
@@ -111,6 +111,7 @@ def circus_status(endpoint=None, process=None):
             default['pid'] = pid
             default['status'] = status['statuses'][process]
             default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.timedelta(seconds=uptime))
-        except:
-            pass
+        except Exception as exc:
+            if'TIMED OUT' in exc.message.upper():
+                default['status'] = 'stopped'
     return default
