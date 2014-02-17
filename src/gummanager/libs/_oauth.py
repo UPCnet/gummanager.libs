@@ -159,14 +159,6 @@ class OauthServer(object):
         )
 
         self.buildout.folder = new_instance_folder
-        print """
-    Adding a new osiris OAuth server:
-        name: "{}"
-        server: "{}"
-        port_index: "{}"
-        ldap_branch: "{}"
-
-        """.format(instance_name, self.server, port_index, ldap_name)
 
         if self.remote.file_exists('{}'.format(new_instance_folder)):
             padded_error('Folder {} already exists'.format(new_instance_folder))
