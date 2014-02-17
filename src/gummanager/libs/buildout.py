@@ -54,7 +54,9 @@ class RemoteBuildoutHelper(object):
             'cd {} && ./bin/buildout -c {}'.format(self.folder, self.cfgfile),
             _out=buildout_log
         )
-        return code == 0
+        circus_installed = self.remote.file_exists('{}/config/circus.ini'.format(self.folder))
+
+        return code == 0 and circus_installed
 
     def change_permissions(self, uid):
         code, stdout = self.remote.execute('cd {0} && chown {1}:{1}'.format(self.folder, uid))

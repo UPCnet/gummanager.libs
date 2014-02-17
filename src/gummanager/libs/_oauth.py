@@ -150,7 +150,7 @@ class OauthServer(object):
                 'name': instance_name,
             },
             'ports': {
-                'port_index': port_index,
+                'port_index': '{:0>2}'.format(port_index),
             },
 
         }

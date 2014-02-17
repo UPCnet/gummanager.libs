@@ -67,7 +67,6 @@ class MaxServer(object):
             return {}
 
         maxconfig = parse_ini_from(max_ini)
-
         port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
 
         instance = OrderedDict()
@@ -156,7 +155,7 @@ class MaxServer(object):
                 'name': instance_name,
             },
             'ports': {
-                'port_index': port_index,
+                'port_index': '{:0>2}'.format(port_index),
             },
             'urls': {
                 'oauth': 'https://{}/{}'.format(self.default_oauth_server_dns, oauth_instance)
