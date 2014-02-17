@@ -6,9 +6,11 @@ from circus.client import CircusClient
 import datetime
 import humanize
 import re
-import sys
 from blessings import Terminal
+
+
 term = Terminal()
+
 
 class RemoteConnection(object):
     def __init__(self, user, server):
@@ -24,7 +26,7 @@ class RemoteConnection(object):
 
     def file_exists(self, filename):
         try:
-            result = self.ssh('ls {}'.format(filename))
+            self.ssh('ls {}'.format(filename))
         except ErrorReturnCode:
             return False
         return True
@@ -38,7 +40,7 @@ class RemoteConnection(object):
 
     def put_file(self, filename, content):
         try:
-            result = self.ssh("cat > {}".format(filename),_in=content)
+            self.ssh("cat > {}".format(filename), _in=content)
         except ErrorReturnCode:
             return None
         # if successfull check back content of file
@@ -48,8 +50,10 @@ class RemoteConnection(object):
 def padded_success(string):
     print term.bold_green + '    {}'.format(string) + term.normal
 
+
 def padded_error(string):
     print term.bold_red + '    {}\n'.format(string) + term.normal
+
 
 def padded_log(string, filters=[]):
     string = string.rstrip()

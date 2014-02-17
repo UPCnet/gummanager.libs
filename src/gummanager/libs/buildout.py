@@ -38,10 +38,10 @@ class RemoteBuildoutHelper(object):
 
     def configure_file(self, cfgfile, params):
         customizeme = configure_ini(
-            string=self.remote.get_file(cfgfile),
+            string=self.remote.get_file("{}/{}".format(self.folder, cfgfile)),
             params=params)
 
-        success = self.remote.put_file("{}/customizeme.cfg".format(self.folder), customizeme)
+        success = self.remote.put_file("{}/{}".format(self.folder, cfgfile), customizeme)
         return success
 
     def execute(self):
@@ -59,10 +59,11 @@ class RemoteBuildoutHelper(object):
     def config_files(self):
         if not self._remote_config_files:
             code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root))
-            tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
-            for taredfile in tar.members:
-                instance_name, config, filename = taredfile.name.strip('./').split('/')
-                self._remote_config_files.setdefault(instance_name, {})
-                extracted_file = tar.extractfile(taredfile.name)
-                self._remote_config_files[instance_name][filename] = extracted_file.read()
+            if stdout:
+                tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
+                for taredfile in tar.members:
+                    instance_name, config, filename = taredfile.name.strip('./').split('/')
+                    self._remote_config_files.setdefault(instance_name, {})
+                    extracted_file = tar.extractfile(taredfile.name)
+                    self._remote_config_files[instance_name][filename] = extracted_file.read()
         return self._remote_config_files

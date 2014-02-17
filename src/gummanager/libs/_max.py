@@ -84,13 +84,21 @@ class MaxServer(object):
 
         return instance
 
+    def instance_by_port_index(self, port_index):
+        instances = self.get_instances()
+        for instance in instances:
+            if instance['port_index'] == port_index:
+                return instance
+        return None
+
     def get_available_port(self):
         instances = self.get_instances()
         ports = [instance['port_index'] for instance in instances]
         ports.sort()
-        return ports[-1] + 1
+        return ports[-1] + 1 if ports else 1
 
-    def new_instance(self, instance_name, port_index):
+    def new_instance(self, instance_name, port_index, oauth_instance=None):
+        oauth_instance = oauth_instance if oauth_instance is not None else instance_name
         repo_url = 'https://github.com/UPCnet/maxserver'
         new_instance_folder = '{}/{}'.format(
             self.instances_root,
@@ -99,12 +107,13 @@ class MaxServer(object):
 
         self.buildout.folder = new_instance_folder
         print """
-    Adding a new osiris OAuth server:
+    Adding a new max/bigmax server:
         name: "{}"
         server: "{}"
         port_index: "{}"
+        oauth_server: "{}"
 
-        """.format(instance_name, self.server, port_index)
+        """.format(instance_name, self.server, port_index, oauth_instance)
 
         if self.remote.file_exists('{}'.format(new_instance_folder)):
             padded_error('Folder {} already exists'.format(new_instance_folder))
@@ -149,6 +158,9 @@ class MaxServer(object):
             'ports': {
                 'port_index': port_index,
             },
+            'urls': {
+                'oauth': 'https://{}/{}'.format(self.default_oauth_server_dns, oauth_instance)
+            }
 
         }
 
@@ -187,14 +199,13 @@ class MaxServer(object):
             'instance_folder': new_instance_folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
-
-        success = self.remote.put_file("/etc/init.d/MAX_{}".format(instance_name), initd_script)
+        success = self.remote.put_file("/etc/init.d/max_{}".format(instance_name), initd_script)
 
         code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(instance_name))
         if code != 0:
             success = False
 
-        code, stdout = self.remote.execute("update-rc.d oauth_{} defaults".format(instance_name))
+        code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(instance_name))
         if code != 0:
             success = False
 

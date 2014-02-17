@@ -51,9 +51,9 @@ OSIRIS_NGINX_ENTRY = """
 """
 
 MAX_NGINX_ENTRY = """
-    location = /{instance_name} {rewrite ^([^.]*[^/])$ $1/ permanent;}
+    location = /{instance_name} {{rewrite ^([^.]*[^/])$ $1/ permanent;}}
 
-    location ~* ^/{instance_name}/stomp {
+    location ~* ^/{instance_name}/stomp {{
         proxy_set_header X-Virtual-Host-URI $scheme://{server_dns}/{instance_name};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host $http_host;
@@ -63,9 +63,9 @@ MAX_NGINX_ENTRY = """
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-     }
+     }}
 
-    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|admin|auth).*$ {
+    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|admin|auth).*$ {{
         proxy_set_header X-Virtual-Host-URI $scheme://{server_dns}/{instance_name};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host $http_host;
@@ -73,11 +73,11 @@ MAX_NGINX_ENTRY = """
         rewrite ^/{instance_name}/(.*) /$1 break;
 
         proxy_pass    http://{server_dns}:{bigmax_port};
-     }
+     }}
 
-    location ~ ^/{instance_name}/(.*) {
+    location ~ ^/{instance_name}/(.*) {{
 
-        if ($request_method = 'OPTIONS') {
+        if ($request_method = 'OPTIONS') {{
 
             # Tell client that this pre-flight info is valid for 20 days
             add_header 'Access-Control-Max-Age' 1728000;
@@ -85,7 +85,7 @@ MAX_NGINX_ENTRY = """
             add_header 'Content-Length' 0;
 
             return 200;
-        }
+        }}
 
         proxy_set_header X-Virtual-Host-URI $scheme://{server_dns}/{instance_name};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -94,5 +94,5 @@ MAX_NGINX_ENTRY = """
         rewrite ^/{instance_name}/(.*) /$1 break;
 
         proxy_pass   http://{server_dns}:{max_port};
-    }
+    }}
 """
