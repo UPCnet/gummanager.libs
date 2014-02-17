@@ -92,6 +92,7 @@ def configure_ini(string=None, filename=None, url=None, params={}):
             section[element_name] = value
 
     out = StringIO()
+    config.default_encoding = 'utf-8'
     config.write(out)
     out.seek(0)
     return out.read().replace('"', '')
