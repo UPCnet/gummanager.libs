@@ -54,6 +54,11 @@ class RemoteBuildoutHelper(object):
             'cd {} && ./bin/buildout -c {}'.format(self.folder, self.cfgfile),
             _out=buildout_log
         )
+        return code == 0
+
+    def change_permissions(self, uid):
+        code, stdout = self.remote.execute('cd {0} && chown {1}:{1}'.format(self.folder, uid))
+        return code == 0
 
     @property
     def config_files(self):

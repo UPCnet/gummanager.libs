@@ -225,3 +225,14 @@ class MaxServer(object):
             return None
         else:
             padded_success("Succesfully created a new max instance")
+
+        progress_log('Executing buildout')
+
+        ###########################################################################################
+
+        success = self.buildout.change_permissions(self.process_uid)
+        if success:
+            padded_error("Error on changing permissions")
+            return None
+        else:
+            padded_success("Succesfully changed permissions")
