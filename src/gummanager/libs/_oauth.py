@@ -34,7 +34,6 @@ class OauthServer(object):
         return instances
 
     def reload_nginx_configuration(self):
-        import ipdb;ipdb.set_trace()
         progress_log('Reloading nginx configuration')
         padded_log('Testing configuration')
         code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
