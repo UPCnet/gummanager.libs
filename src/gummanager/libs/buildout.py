@@ -1,13 +1,18 @@
 from gummanager.libs.utils import padded_log, configure_ini
 
+import tarfile
+from StringIO import StringIO
+
 
 class RemoteBuildoutHelper(object):
     folder = ''
     cfgfile = ''
+    _remote_config_files = {}
 
-    def __init__(self, remoteConnection, python_interpreter):
+    def __init__(self, remoteConnection, python_interpreter, config):
         self.remote = remoteConnection
         self.python_interpreter = python_interpreter
+        self.config = config
 
     def clone(self, repo):
         code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
@@ -49,3 +54,15 @@ class RemoteBuildoutHelper(object):
             'cd {} && ./bin/buildout -c {}'.format(self.folder, self.cfgfile),
             _out=buildout_log
         )
+
+    @property
+    def config_files(self):
+        if not self._remote_config_files:
+            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root))
+            tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
+            for taredfile in tar.members:
+                instance_name, config, filename = taredfile.name.strip('./').split('/')
+                self._remote_config_files.setdefault(instance_name, {})
+                extracted_file = tar.extractfile(taredfile.name)
+                self._remote_config_files[instance_name][filename] = extracted_file.read()
+        return self._remote_config_files

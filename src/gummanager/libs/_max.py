@@ -1,46 +1,31 @@
-from gummanager.libs.utils import RemoteConnection
-from gummanager.libs.utils import configure_ini
-from gummanager.libs.utils import parse_ini_from
-from gummanager.libs.utils import circus_status, progress_log
-from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
-from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
-from gummanager.libs.ports import OSIRIS_BASE_PORT, padded_error, padded_success
-from gummanager.libs.ports import MAX_BASE_PORT
+from collections import OrderedDict
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
-
-import tarfile
-from StringIO import StringIO
-from collections import OrderedDict
+from gummanager.libs.ports import BIGMAX_BASE_PORT
+from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
+from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
+from gummanager.libs.ports import MAX_BASE_PORT
+from gummanager.libs.utils import padded_error
+from gummanager.libs.utils import padded_success
+from gummanager.libs.utils import RemoteConnection
+from gummanager.libs.utils import circus_status
+from gummanager.libs.utils import parse_ini_from
+from gummanager.libs.utils import progress_log
 
 
 class MaxServer(object):
-    _remote_config_files = {}
 
     def __init__(self, *args, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
         self.remote = RemoteConnection(self.ssh_user, self.server)
-        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter)
-
-    @property
-    def remote_config_files(self):
-        if not self._remote_config_files:
-            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
-            tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
-            for taredfile in tar.members:
-                instance_name, config, filename = taredfile.name.strip('./').split('/')
-                self._remote_config_files.setdefault(instance_name, {})
-                extracted_file = tar.extractfile(taredfile.name)
-                self._remote_config_files[instance_name][filename] = extracted_file.read()
-        return self._remote_config_files
+        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
 
     def get_instances(self):
         instances = []
-        for instance_name in self.remote_config_files:
+        for instance_name in self.buildout.config_files:
             instance = self.get_instance(instance_name)
             if instance:
                 instances.append(instance)
@@ -48,21 +33,36 @@ class MaxServer(object):
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
-        status = circus_status(
+        max_status = circus_status(
             endpoint=instance['circus_tcp'],
-            process='osiris'
+            process='max'
+        )
+        bigmax_status = circus_status(
+            endpoint=instance['circus_tcp'],
+            process='bigmax'
         )
 
         result_status = OrderedDict()
         result_status['name'] = instance_name
         result_status['server'] = instance['server']
-        result_status['status'] = status['status']
-        result_status['pid'] = status['pid']
-        result_status['uptime'] = status['uptime']
+        result_status['status'] = {
+            'max': max_status['status'],
+            'bigmax': bigmax_status['status'],
+        }
+        result_status['pid'] = {
+            'max': max_status['pid'],
+            'bigmax': bigmax_status['pid'],
+        }
+
+        result_status['uptime'] = {
+            'max': max_status['uptime'],
+            'bigmax': bigmax_status['uptime'],
+        }
+
         return result_status
 
     def get_instance(self, instance_name):
-        max_ini = self.remote_config_files[instance_name].get('max.ini', '')
+        max_ini = self.buildout.config_files[instance_name].get('max.ini', '')
         if not max_ini:
             return {}
 
@@ -166,7 +166,8 @@ class MaxServer(object):
         nginx_params = {
             'instance_name': instance_name,
             'server_dns': self.server_dns,
-            'osiris_port': int(port_index) + OSIRIS_BASE_PORT
+            'bigmax_port': int(port_index) + BIGMAX_BASE_PORT,
+            'max_port': int(port_index) + MAX_BASE_PORT
         }
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
@@ -213,13 +214,3 @@ class MaxServer(object):
             return None
         else:
             padded_success("Succesfully created a new max instance")
-
-
-
-
-
-
-
-
-
-

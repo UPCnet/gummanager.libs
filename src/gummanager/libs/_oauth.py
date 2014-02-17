@@ -12,37 +12,21 @@ from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
-import tarfile
-from StringIO import StringIO
 from collections import OrderedDict
 
 
 class OauthServer(object):
-    _remote_config_files = {}
 
     def __init__(self, *args, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
         self.remote = RemoteConnection(self.ssh_user, self.server)
-        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter)
-
-    @property
-    def remote_config_files(self):
-        if not self._remote_config_files:
-            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.instances_root))
-            if stdout:
-                tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
-                for taredfile in tar.members:
-                    instance_name, config, filename = taredfile.name.strip('./').split('/')
-                    self._remote_config_files.setdefault(instance_name, {})
-                    extracted_file = tar.extractfile(taredfile.name)
-                    self._remote_config_files[instance_name][filename] = extracted_file.read()
-        return self._remote_config_files
+        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
 
     def get_instances(self):
         instances = []
-        for instance_name in self.remote_config_files:
+        for instance_name in self.buildout.config_files:
             instance = self.get_instance(instance_name)
             if instance:
                 instances.append(instance)
@@ -64,12 +48,12 @@ class OauthServer(object):
         return result_status
 
     def get_instance(self, instance_name):
-        osiris_ini = self.remote_config_files[instance_name].get('osiris.ini', '')
+        osiris_ini = self.buildout.config_files[instance_name].get('osiris.ini', '')
         if not osiris_ini:
             return {}
         osiris = parse_ini_from(osiris_ini)
 
-        ldap_ini = self.remote_config_files[instance_name].get('ldap.ini', '')
+        ldap_ini = self.buildout.config_files[instance_name].get('ldap.ini', '')
         if not ldap_ini:
             return {}
         ldap = parse_ini_from(ldap_ini)
