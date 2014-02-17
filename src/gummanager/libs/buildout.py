@@ -55,7 +55,6 @@ class RemoteBuildoutHelper(object):
             _out=buildout_log
         )
         circus_installed = self.remote.file_exists('{}/config/circus.ini'.format(self.folder))
-        import ipdb;ipdb.set_trace()
         return code == 0 and circus_installed
 
     def change_permissions(self, uid):
