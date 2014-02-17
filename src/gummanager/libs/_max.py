@@ -272,10 +272,10 @@ class MaxServer(object):
 
         success = self.buildout.execute()
         if success:
+            padded_success("Succesfully created a new max instance")
+        else:
             padded_error("Error on buildout execution")
             return None
-        else:
-            padded_success("Succesfully created a new max instance")
 
         progress_log('Executing buildout')
 

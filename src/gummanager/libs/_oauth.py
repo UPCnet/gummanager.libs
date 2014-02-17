@@ -286,10 +286,10 @@ class OauthServer(object):
 
         success = self.buildout.execute()
         if success:
+            padded_success("Succesfully created a new oauth instance")
+        else:
             padded_error("Error on buildout execution")
             return None
-        else:
-            padded_success("Succesfully created a new oauth instance")
 
         ###########################################################################################
 
