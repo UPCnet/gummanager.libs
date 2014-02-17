@@ -1,8 +1,8 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from
-from gummanager.libs.utils import circus_status
-from gummanager.libs.utils import progress_log, padded_success, padded_error
+from gummanager.libs.utils import circus_status, circus_control
+from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
@@ -13,6 +13,7 @@ from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
 from collections import OrderedDict
+from time import sleep
 
 
 class OauthServer(object):
@@ -31,6 +32,47 @@ class OauthServer(object):
             if instance:
                 instances.append(instance)
         return instances
+
+    def start(self, instance_name):
+        progress_log('Starting instance')
+        status = self.get_status(instance_name)
+        instance = self.get_instance(instance_name)
+
+        if status['status'] == 'unknown':
+            padded_log('Circus stopped, starting circusd ...')
+            code, stdout = self.remote.execute('/etc/init.d/oauth_{} start'.format(instance_name))
+        elif status['status'] == 'stopped':
+            padded_log('Osiris stopped, starting process ...')
+            circus_control(
+                'start',
+                endpoint=instance['circus_tcp'],
+                process='osiris'
+            )
+
+        padded_log('Waiting for circus...')
+        sleep(1)
+        status = self.get_status(instance_name)
+        if status['status'] == 'active':
+            padded_success('Oauth instance {} started'.format(instance_name))
+        else:
+            padded_error('Oauth instance {} not started'.format(instance_name))
+
+    def stop(self, instance_name):
+        progress_log('Stopping instance')
+        instance = self.get_instance(instance_name)
+        circus_control(
+            'stop',
+            endpoint=instance['circus_tcp'],
+            process='osiris'
+        )
+
+        padded_log('Waiting for circus to shutdown...')
+        sleep(1)
+        status = self.get_status(instance_name)
+        if status['status'] == 'stopped':
+            padded_success('Osiris OAuth instance {} stopped'.format(instance_name))
+        else:
+            padded_error('Osiris OAuth instance {} still active'.format(instance_name))
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
@@ -208,7 +250,7 @@ class OauthServer(object):
 
         progress_log('Generating init.d script')
         initd_params = {
-            'port_index': port_index,
+            'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
             'instance_folder': new_instance_folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)

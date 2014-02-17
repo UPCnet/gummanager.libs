@@ -98,6 +98,12 @@ def configure_ini(string=None, filename=None, url=None, params={}):
     return out.read().replace('"', '')
 
 
+def circus_control(action, endpoint=None, process=None):
+    if endpoint and process:
+        client = CircusClient(endpoint=endpoint, timeout=2)
+        client.send_message(action)
+
+
 def circus_status(endpoint=None, process=None):
     default = {
         'pid': 'unknown',
@@ -112,11 +118,17 @@ def circus_status(endpoint=None, process=None):
             stats = client.send_message('stats')
             # Assuming here there's only a process
             pid = stats['infos'][process].keys()[0]
-            uptime = int(stats['infos'][process][pid]['age'])
-            default['pid'] = pid
+            try:
+                uptime = int(stats['infos'][process][pid]['age'])
+                default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.timedelta(seconds=uptime))
+                default['pid'] = pid
+            except:
+                # circus running but process stopped
+                pass
             default['status'] = status['statuses'][process]
-            default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.timedelta(seconds=uptime))
+
         except Exception as exc:
             if'TIMED OUT' in exc.message.upper():
-                default['status'] = 'stopped'
+                # circus stopped
+                default['status'] = 'unknown'
     return default

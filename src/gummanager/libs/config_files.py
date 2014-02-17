@@ -17,7 +17,7 @@ INIT_D_SCRIPT = """#!/bin/sh
 
 WORKDIR={instance_folder}
 CONFDIR=$WORKDIR/config
-ENDPOINT=141{port_index}
+ENDPOINT={port_index}
 
 case "$1" in
 'start')

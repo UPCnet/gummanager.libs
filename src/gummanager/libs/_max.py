@@ -194,7 +194,7 @@ class MaxServer(object):
 
         progress_log('Generating init.d script')
         initd_params = {
-            'port_index': port_index,
+            'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
             'instance_folder': new_instance_folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
