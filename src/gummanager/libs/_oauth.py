@@ -33,6 +33,24 @@ class OauthServer(object):
                 instances.append(instance)
         return instances
 
+    def reload_nginx_configuration(self):
+        import ipdb;ipdb.set_trace()
+        progress_log('Reloading nginx configuration')
+        padded_log('Testing configuration')
+        code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
+        if code == 0 and 'done' in stdout:
+            padded_success('Configuration test passed')
+        else:
+            padded_error('Configuration test failed')
+            return None
+
+        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
+        if code == 0 and 'done' in stdout:
+            padded_success('Nginx reloaded succesfully')
+        else:
+            padded_error('Error reloading nginx')
+            return None
+
     def start(self, instance_name):
         progress_log('Starting instance')
         status = self.get_status(instance_name)
