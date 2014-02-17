@@ -74,15 +74,15 @@ class LdapServer(object):
         })
         self.ld.add_s(dn, ldif)
 
-    def addBranch(self, branch_name):
+    def add_branch(self, branch_name):
         self.cd('/')
-        self.ld.addOU(branch_name)
-        self.ld.cd('ou={}'.format(branch_name))
-        self.ld.addUser('ldap', 'LDAP Access User', 'secret')
-        self.ld.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
-        self.ld.addGroup('Managers')
-        self.ld.addOU('groups')
-        self.ld.addOU('users')
+        self.addOU(branch_name)
+        self.cd('ou={}'.format(branch_name))
+        self.addUser('ldap', 'LDAP Access User', 'secret')
+        self.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
+        self.addGroup('Managers')
+        self.addOU('groups')
+        self.addOU('users')
 
     def get_branch_users(self, branch_name):
         self.cd('/')
