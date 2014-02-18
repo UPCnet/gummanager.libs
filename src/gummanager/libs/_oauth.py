@@ -5,12 +5,14 @@ from gummanager.libs.utils import circus_status, circus_control
 from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
+from gummanager.libs.ports import CIRCUS_NGINX_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
 
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
+from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 
 from collections import OrderedDict
 from time import sleep
@@ -253,6 +255,23 @@ class OauthServer(object):
             padded_success("Succesfully created {}/config/osiris-instances/{}.conf".format(self.nginx_root, instance_name))
         else:
             padded_error('Error when generating nginx config file')
+            return None
+
+        ###########################################################################################
+
+        progress_log('Creating nginx entry for circus')
+        circus_nginx_params = {
+            'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
+            'circus_tcp_endpoint': int(port_index) + CIRCUS_TCP_BASE_PORT
+        }
+        circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
+
+        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
+
+        if success:
+            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
+        else:
+            padded_error('Error when generating nginx config file for circus')
             return None
 
         ###########################################################################################
