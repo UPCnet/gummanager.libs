@@ -29,12 +29,12 @@ class GenwebServer(object):
             auth = (environment['admin_username'], environment['admin_password'])
             port = GENWEB_ZOPE_CLIENT_BASE_PORT + 1
             resp = requests.get(
-                "http://{}:{}/manage_menu".format(environment['server'], port), 
+                "http://{}:{}/manage_menu".format(environment['server'], port),
                 auth=auth)
 
             expanded_menu = PyQuery(resp.content).find('table tr a[href*=tree-e]').attr('href')
             resp = requests.get(
-                "http://{}:{}/{}".format(environment['server'], port, expanded_menu), 
+                "http://{}:{}/{}".format(environment['server'], port, expanded_menu),
                 auth=auth)
 
             table = PyQuery(resp.content).find('table')[1]
@@ -50,11 +50,11 @@ class GenwebServer(object):
                     current_plone = ptr.find('td a')[-1].text
                     instance_info = self.get_instance('{}/{}'.format(current_mountpoint, current_plone))
                     plone_instance = OrderedDict()
-                    plone_instance['environment'] = environment['name']
+                    plone_instance['environment'] = environment['server']
                     plone_instance['mountpoint'] = current_mountpoint
                     plone_instance['plonesite'] = current_plone
                     plone_instance['url'] = 'http://{}:{}/{}/{}'.format(
-                        environment['server'], 
+                        environment['server'],
                         port,
                         current_mountpoint,
                         current_plone

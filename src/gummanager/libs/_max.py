@@ -38,6 +38,7 @@ class MaxServer(object):
 
     def configure_max_security_settings(self, instance_name):
         try:
+            import ipdb;ipdb.set_trace()
             new_instance_folder = '{}/{}'.format(
                 self.instances_root,
                 instance_name
@@ -321,23 +322,20 @@ class MaxServer(object):
             padded_error("Error on buildout execution")
             return None
 
-        progress_log('Executing buildout')
-
         ###########################################################################################
 
         progress_log('Changing permissions')
 
         success = self.buildout.change_permissions(self.process_uid)
         if success:
-            padded_error("Error on changing permissions")
+            padded_success("Succesfully changed permissions")
             return None
         else:
-            padded_success("Succesfully changed permissions")
+            padded_error("Error on changing permissions")
 
         ###########################################################################################
 
         progress_log('Configuring default permissions settings')
-        import ipdb;ipdb.set_trace()
 
         success = self.configure_max_security_settings(instance_name)
         if success:

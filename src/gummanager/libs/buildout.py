@@ -54,7 +54,6 @@ class RemoteBuildoutHelper(object):
             'cd {} && ./bin/buildout -c {}'.format(self.folder, self.cfgfile),
             _out=buildout_log
         )
-        import ipdb;ipdb.set_trace()
         circus_installed = self.remote.file_exists('{}/config/circus.ini'.format(self.folder))
         return code == 0 and circus_installed
 
