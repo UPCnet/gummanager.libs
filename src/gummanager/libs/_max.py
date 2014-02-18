@@ -336,6 +336,7 @@ class MaxServer(object):
         ###########################################################################################
 
         progress_log('Configuring default permissions settings')
+        import ipdb;ipdb.set_trace()
 
         success = self.configure_max_security_settings(instance_name)
         if success:

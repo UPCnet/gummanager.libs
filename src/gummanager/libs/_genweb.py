@@ -8,6 +8,7 @@ from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
+from gummanager.libs.utils import padded_error
 
 import tarfile
 from StringIO import StringIO
@@ -63,6 +64,50 @@ class GenwebServer(object):
                     instances.append(plone_instance)
 
         return instances
+
+    def new_instance(self, instance_name):
+
+        siteid = 'instance_name'
+        environment = self.environments[0]
+        title = siteid.capitalize()
+        language = 'ca'
+        mountpoint = '1'
+
+        # Check if site exists
+
+        AUTH = (environment['admin_username'], environment['admin_password'])
+
+        genweb_base_url = 'http://{}:{}'.format(
+            environment['server'],
+            GENWEB_ZOPE_CLIENT_BASE_PORT + 1
+        )
+
+        #Create Plone Site
+        print "Creating Plone Site"
+        params = {
+            "site_id": siteid,
+            "title": title,
+            "default_language": language,
+            "setup_content:boolean": True,
+            "extension_ids:list": [
+                'plonetheme.classic:default',
+                'plonetheme.sunburst:default',
+                'genweb.core:default'
+            ],
+            "form.submitted:boolean": True,
+            "submit": "Crear lloc Plone"
+        }
+
+        manage_plone_url = '{}/{}/{}/manage' % (genweb_base_url, mountpoint, siteid)
+
+        req = requests.post('%s/%s/@@plone-addsite' % (genweb_base_url, siteid), params, auth=AUTH)
+        if req.status_code not in [302, 200]:
+            padded_error('Hi ha hagut algun error al afegir el plone a <a href="{}">{}</a>. Ja existeix?'.format(manage_plone_url, manage_plone_url))
+
+        req = requests.get('%s/%s/%s' % (genweb_base_url, siteid, siteid), auth=AUTH,)
+
+        if 'titol-eines-usuari' not in req.content:
+            padded_error('Hi ha hagut algun error instalant el genweb a <a href="{}">{}</a'.format(manage_plone_url, manage_plone_url))
 
     def get_instance(self, instance_path):
         mountpoint, plonesite = instance_path.split('/')
