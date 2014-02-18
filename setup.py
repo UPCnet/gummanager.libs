@@ -43,6 +43,7 @@ setup(name='gummanager.libs',
           'configobj',
           'circus',
           'humanize',
+          'pymongo'
       ],
       entry_points="""
       # -*- Entry points: -*-

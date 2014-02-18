@@ -10,6 +10,7 @@ from blessings import Terminal
 
 
 term = Terminal()
+DEBUG_MODE = True
 
 
 class RemoteConnection(object):
@@ -19,30 +20,38 @@ class RemoteConnection(object):
     def execute(self, command, **kwargs):
         try:
             result = self.ssh(command, **kwargs)
-        except:
-            return None, ''
+        except ErrorReturnCode as error_code:
+            if DEBUG_MODE:
+                print '\n' + error_code.stderr + '\n'
+            return 1, error_code.stderr
 
         return result.exit_code, result.stdout
 
     def file_exists(self, filename):
         try:
             self.ssh('ls {}'.format(filename))
-        except ErrorReturnCode:
+        except ErrorReturnCode as error_code:
+            if DEBUG_MODE:
+                print '\n' + error_code.stderr + '\n'
             return False
         return True
 
     def get_file(self, filename):
         try:
             result = self.ssh('cat {}'.format(filename))
-        except ErrorReturnCode:
-            return None
+        except ErrorReturnCode as error_code:
+            if DEBUG_MODE:
+                print '\n' + error_code.stderr + '\n'
+            return False
         return result.stdout
 
     def put_file(self, filename, content):
         try:
             self.ssh("cat > {}".format(filename), _in=content)
-        except ErrorReturnCode:
-            return None
+        except ErrorReturnCode as error_code:
+            if DEBUG_MODE:
+                print '\n' + error_code.stderr + '\n'
+            return False
         # if successfull check back content of file
         return self.get_file(filename) == content
 

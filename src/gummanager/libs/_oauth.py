@@ -197,7 +197,7 @@ class OauthServer(object):
                 'rabbitmq': self.rabbitmq_server,
                 'mongodb_cluster': self.mongodb_cluster
             },
-            'max': {
+            'max-config': {
                 'name': instance_name,
             },
             'ports': {
@@ -282,6 +282,17 @@ class OauthServer(object):
 
         ###########################################################################################
 
+        progress_log('Configuring authorized users')
+        success = self.remote.put_file("{}/config/.authorized_users".format(new_instance_folder), "restricted")
+
+        if success:
+            padded_success("Succesfully configured {}/config/.authorized_users".format(new_instance_folder))
+        else:
+            padded_error('Error when configuring authorized users')
+            return None
+
+        ###########################################################################################
+
         progress_log('Executing buildout')
 
         success = self.buildout.execute()
@@ -295,7 +306,7 @@ class OauthServer(object):
 
         success = self.buildout.change_permissions(self.process_uid)
         if success:
-            padded_error("Error on changing permissions")
+            padded_success("Succesfully changed permissions")
             return None
         else:
-            padded_success("Succesfully changed permissions")
+            padded_error("Error on changing permissions")

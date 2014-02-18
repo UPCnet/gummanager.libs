@@ -96,3 +96,24 @@ MAX_NGINX_ENTRY = """
         proxy_pass   http://{server_dns}:{max_port};
     }}
 """
+CIRCUS_NGINX_ENTRY = """
+  server {{
+   listen   {circus_nginx_port};
+   server_name  localhost;
+
+   location / {{
+
+     proxy_http_version 1.1;
+     proxy_set_header Upgrade $http_upgrade;
+     proxy_set_header Connection "upgrade";
+     proxy_set_header Host $host:$server_port;
+     proxy_set_header X-Real-IP $remote_addr;
+     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+     proxy_set_header X-Forwarded-Proto http;
+     proxy_set_header X-Forwarded-Host $host:$server_port;
+     proxy_pass http://localhost:{circus_tcp_endpoint};
+     auth_basic            "Restricted";
+     auth_basic_user_file  /var/nginx/config/circus.htpasswd;
+    }}
+  }}
+"""

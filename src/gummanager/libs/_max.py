@@ -2,9 +2,11 @@ from collections import OrderedDict
 from gummanager.libs.buildout import RemoteBuildoutHelper
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
+from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 from gummanager.libs.ports import BIGMAX_BASE_PORT
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
+from gummanager.libs.ports import CIRCUS_NGINX_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.utils import padded_error, padded_log
 from gummanager.libs.utils import padded_success
@@ -14,6 +16,7 @@ from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 
 from time import sleep
+import pymongo
 
 
 class MaxServer(object):
@@ -32,6 +35,30 @@ class MaxServer(object):
             if instance:
                 instances.append(instance)
         return instances
+
+    def configure_max_security_settings(self, instance_name):
+        try:
+            new_instance_folder = '{}/{}'.format(
+                self.instances_root,
+                instance_name
+            )
+
+            self.buildout.folder = new_instance_folder
+
+            users = self.authorized_users
+            default_security = {'roles': {"Manager": users}}
+            hosts = self.mongodb_cluster
+            replica_set = self.buildout.config_files['max.ini']['mongodb.replica_set']
+            conn = pymongo.MongoReplicaSetClient(hosts, replicaSet=replica_set)
+
+            db_name = self.buildout.config_files['max.ini']['mongodb.db_name']
+            db = conn[db_name]
+
+            if not [items for items in db.security.find({})]:
+                db.security.insert(default_security)
+        except:
+            return None
+        return True
 
     def reload_nginx_configuration(self):
         progress_log('Reloading nginx configuration')
@@ -203,7 +230,7 @@ class MaxServer(object):
                 'rabbitmq': self.rabbitmq_server,
                 'mongodb_cluster': self.mongodb_cluster
             },
-            'max': {
+            'max-config': {
                 'name': instance_name,
             },
             'ports': {
@@ -225,7 +252,7 @@ class MaxServer(object):
 
         ###########################################################################################
 
-        progress_log('Creating nginx entry')
+        progress_log('Creating nginx entry for max')
         nginx_params = {
             'instance_name': instance_name,
             'server_dns': self.server_dns,
@@ -239,7 +266,24 @@ class MaxServer(object):
         if success:
             padded_success("Succesfully created {}/config/max-instances/{}.conf".format(self.nginx_root, instance_name))
         else:
-            padded_error('Error when generating nginx config file')
+            padded_error('Error when generating nginx config file for max')
+            return None
+
+        ###########################################################################################
+
+        progress_log('Creating nginx entry for circus')
+        circus_nginx_params = {
+            'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
+            'circus_tcp_endpoint': int(port_index) + CIRCUS_TCP_BASE_PORT
+        }
+        circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
+
+        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
+
+        if success:
+            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
+        else:
+            padded_error('Error when generating nginx config file for circus')
             return None
 
         ###########################################################################################
@@ -281,9 +325,24 @@ class MaxServer(object):
 
         ###########################################################################################
 
+        progress_log('Changing permissions')
+
         success = self.buildout.change_permissions(self.process_uid)
         if success:
             padded_error("Error on changing permissions")
             return None
         else:
             padded_success("Succesfully changed permissions")
+
+        ###########################################################################################
+
+        progress_log('Configuring default permissions settings')
+        import ipdb;ipdb.set_trace()
+
+        success = self.configure_max_security_settings(instance_name)
+        if success:
+            padded_success("Succesfully changed permissions settings")
+            return None
+        else:
+            padded_error("Error on setting permissions settings")
+
