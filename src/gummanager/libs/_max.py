@@ -150,7 +150,7 @@ class MaxServer(object):
         return result_status
 
     def get_instance(self, instance_name):
-        max_ini = self.buildout.config_files[instance_name].get('max.ini', '')
+        max_ini = self.buildout.config_files.get(instance_name, {}).get('max.ini', '')
         if not max_ini:
             return {}
 

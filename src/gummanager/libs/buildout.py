@@ -7,12 +7,12 @@ from StringIO import StringIO
 class RemoteBuildoutHelper(object):
     folder = ''
     cfgfile = ''
-    _remote_config_files = {}
 
     def __init__(self, remoteConnection, python_interpreter, config):
         self.remote = remoteConnection
         self.python_interpreter = python_interpreter
         self.config = config
+        self._remote_config_files = {}
 
     def clone(self, repo):
         code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(

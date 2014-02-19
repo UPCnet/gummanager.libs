@@ -49,7 +49,7 @@ class Plone(object):
 
     def create(self, packages=[]):
         if self.exists():
-            return error_log('Error on hompepage setup'.format(self.site_url))
+            return error_log('There is already a ulearn on {}'.format(self.site_url))
 
         params = {
             "site_id": self.plonesite,

@@ -117,3 +117,30 @@ CIRCUS_NGINX_ENTRY = """
     }}
   }}
 """
+
+ULEARN_NGINX_ENTRY = """
+    # MAX passthrough for legacy IE compat
+    location = /{instance_name}/max {{
+        rewrite ^([^.]*[^/])$ $1/ permanent;
+    }}
+
+    location ~ ^/{instance_name}/max/(.*) {{
+        proxy_set_header X-Virtual-Host-URI $scheme://$host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+
+        rewrite ^/{instance_name}/max/(.*) /$1 break;
+        proxy_pass {max_server};
+    }}
+
+    location ~ ^/{instance_name}($|/.*) {{
+        proxy_set_header X-Virtual-Host-URI $scheme://$host:$server_port;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+
+        rewrite ^/{instance_name}($|/.*) /VirtualHostBase/$scheme/$host:$server_port/{mountpoint_id}/{instance_name}/VirtualHostRoot/_vh_{instance_name}$1 break;
+        proxy_pass   http://genweb_server;
+    }}
+"""
