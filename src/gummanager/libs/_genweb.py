@@ -178,7 +178,7 @@ class GenwebServer(object):
                     })
                 elif is_plone:
                     current_plone = ptr.find('td a')[-1].text
-                    instance_info = self.get_instance('{}/{}'.format(current_mountpoint, current_plone))
+                    instance_info = self.get_instance(environment, current_mountpoint, current_plone)
                     plone_instance = OrderedDict()
                     plone_instance['environment'] = environment['server']
                     plone_instance['mountpoint'] = current_mountpoint
@@ -215,8 +215,7 @@ class GenwebServer(object):
         yield step_log('Setting up ldap')
         yield site.setup_ldap(branch=ldap_branch)
 
-    def get_instance(self, instance_path):
-        mountpoint, plonesite = instance_path.split('/')
+    def get_instance(self, env, mountpoint, plonesite):
 
         return {
         }

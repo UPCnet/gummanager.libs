@@ -3,9 +3,22 @@ from gummanager.libs.config_files import ULEARN_NGINX_ENTRY
 from gummanager.libs._genweb import GenwebServer, Plone
 import requests
 import json
+from pyquery import PyQuery
 
 
 class UlearnSite(Plone):
+
+    def get_settings(self):
+        req = requests.get('{}/@@maxui-settings'.format(self.site_url), auth=self.auth)
+        pq = PyQuery(req.content)
+        inputs = pq('form input[type=hidden], form input[type=text]')
+
+        settings = {}
+
+        for inp in inputs:
+            pqinput = PyQuery(inp)
+            settings[pqinput.attr('name').split('.')[-1]] = pqinput.val()
+        return settings
 
     def get_token(self, oauth_server, username, password):
         payload = {"grant_type": 'password',
@@ -94,6 +107,11 @@ class ULearnServer(GenwebServer):
             return success_log("Succesfully created {}/config/ulearn-instances/{}.conf".format(self.prefe_nginx_root, site.plonesite))
         else:
             return error_log('Error when generating nginx config file for ulean')
+
+    def get_instance(self, environment, mountpoint, plonesite):
+        site = UlearnSite(environment, mountpoint, plonesite, '', '')
+        settings = site.get_settings()
+        return site.getSettings()
 
     def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch):
 
