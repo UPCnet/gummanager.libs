@@ -8,7 +8,7 @@ from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
-from gummanager.libs.utils import padded_error
+from gummanager.libs.utils import padded_error, step_log, success_log, error_log
 
 import tarfile
 from StringIO import StringIO
@@ -17,14 +17,137 @@ from pyquery import PyQuery
 import requests
 
 
+class Plone(object):
+    def __init__(self, environment, mountpoint, plonesite, title, language):
+        self.environment = environment
+        self.mountpoint = mountpoint
+        self.plonesite = plonesite
+        self.title = title
+        self.language = language
+
+    @property
+    def auth(self):
+        return (self.environment['admin_username'], self.environment['admin_password'])
+
+    @property
+    def mountpoint_url(self):
+        return 'http://{}:{}/{}'.format(
+            self.environment['server'],
+            GENWEB_ZOPE_CLIENT_BASE_PORT + 1,
+            self.mountpoint
+        )
+
+    @property
+    def site_url(self):
+        return '{}/{}'.format(
+            self.mountpoint_url,
+            self.plonesite
+        )
+
+    def exists(self):
+        return requests.get(self.site_url).status_code != 404
+
+    def create(self, packages=[]):
+        if self.exists():
+            return error_log('Error on hompepage setup'.format(self.site_url))
+
+        params = {
+            "site_id": self.plonesite,
+            "title": self.title,
+            "default_language": self.language,
+            "setup_content:boolean": True,
+            "extension_ids:list": [
+                'plonetheme.classic:default',
+                'plonetheme.sunburst:default',
+            ] + packages,
+            "form.submitted:boolean": True,
+            "submit": "Crear lloc Plone"
+        }
+        params
+        create_plone_url = '{}/@@plone-addsite'.format(self.mountpoint_url)
+        req = requests.post(create_plone_url, params, auth=self.auth)
+        if req.status_code not in [302, 200, 204, 201]:
+            return error_log('Error creating Plone site at {}'.format(self.site_url))
+        else:
+            return success_log('Successfully created Plone site at {}'.format(self.site_url))
+
+    def setup_homepage(self):
+        setup_view_url = '{}/setuphomepage'.format(self.site_url)
+        req = requests.get(setup_view_url, auth=self.auth)
+        if req.status_code not in [302, 200, 204, 201]:
+            return error_log('Error on hompepage setup'.format(self.site_url))
+        else:
+            return success_log('Successfully configured homepage'.format(self.site_url))
+
+    def setup_ldap(self, branch=''):
+        setup_view_url = '{}/setupldapexterns'.format(self.site_url)
+        req = requests.get(setup_view_url, auth=self.auth)
+
+        ldap_params = {
+            'title': '{}-LDAP'.format(branch.upper()),
+            'login_attr': 'cn',
+            'uid_attr': 'cn',
+            'rdn_attr': 'cn',
+            'users_base': 'ou=users,ou={},dc=upcnet,dc=es'.format(branch),
+            'users_scope:int': '2',
+            'local_groups:int': '0',
+            'implicit_mapping:int': '0',
+            'groups_base': 'ou=groups,ou={},dc=upcnet,dc=es'.format(branch),
+            'groups_scope:int': '2',
+            'binduid:string': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(branch),
+            'bindpwd:string': 'secret',
+            'binduid_usage:int': '1',
+            'obj_classes': 'top,person,inetOrgPerson',
+            'extra_user_filter': '',
+            'encryption': 'SSHA',
+            'roles': 'Authenticated,Member'
+        }
+        ldap_setup_url = '{}/acl_users/ldapexterns/acl_users/manage_edit'.format(self.site_url)
+        req = requests.post(ldap_setup_url, ldap_params, auth=self.auth)
+        if req.status_code not in [302, 200, 204, 201]:
+            return error_log('Error on ldap branch "{}" setup'.format(branch))
+        else:
+            return success_log('Successfully configured ldap branch "{}"'.format(branch))
+
+
 class GenwebServer(object):
     _remote_config_files = {}
+
     def __init__(self, *args, **kwargs):
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def get_instances(self):
-        instances = []
+    def get_environment(self, server):
+        return [a for a in self.environments if a['server'] == server][0]
+
+    def is_mountpoint_available(self, environment, mountpoint_id, allow_shared=False):
+        mountpoints = self.get_mountpoints()
+        for mountpoint in mountpoints:
+            # Filter out non-official mountpoints
+            if mountpoint_id == mountpoint['id'] and mountpoint['environment'] == environment:
+                if not mountpoint['instances'] or allow_shared:
+                    return True
+
+        return False
+
+    def get_available_mountpoint(self):
+        available = []
+        mountpoints = self.get_mountpoints()
+
+        for mountpoint in mountpoints:
+            # Filter out non-official mountpoints
+            if mountpoint['id'].isdigit():
+                if not mountpoint['instances']:
+                    available.append(mountpoint)
+
+        if available:
+            sorted_mountpoints = sorted(available, key=lambda mountpoint: mountpoint['id'])
+            return sorted_mountpoints[0]
+        else:
+            return None
+
+    def get_mountpoints(self):
+        mountpoints = {}
 
         for environment in self.environments:
             auth = (environment['admin_username'], environment['admin_password'])
@@ -47,6 +170,12 @@ class GenwebServer(object):
                 is_plone = ptr.find('img[alt="Plone Site"]') and len(ptr.find('td')) == 3
                 if is_mountpoint:
                     current_mountpoint = ptr.find('td a')[-1].text
+                    mountpoints.setdefault(current_mountpoint, {
+                        'id': current_mountpoint,
+                        'instances': [],
+                        'port': GENWEB_ZOPE_CLIENT_BASE_PORT + 1,
+                        'environment': environment['server'],
+                    })
                 elif is_plone:
                     current_plone = ptr.find('td a')[-1].text
                     instance_info = self.get_instance('{}/{}'.format(current_mountpoint, current_plone))
@@ -61,53 +190,30 @@ class GenwebServer(object):
                         current_plone
 
                     )
-                    instances.append(plone_instance)
+                    mountpoints[current_mountpoint]['instances'].append(plone_instance)
 
+        return mountpoints.values()
+
+    def get_instances(self):
+        instances = []
+        for mountpoint in self.get_mountpoints():
+            instances.extend(mountpoint['instances'])
         return instances
 
-    def new_instance(self, instance_name):
+    def new_instance(self, instance_name, environment, mountpoint, title, language, ldap_branch):
 
-        siteid = 'instance_name'
-        environment = self.environments[0]
-        title = siteid.capitalize()
-        language = 'ca'
-        mountpoint = '1'
+        environment = self.get_environment(environment)
 
-        # Check if site exists
+        site = Plone(environment, mountpoint, instance_name, title, language)
 
-        AUTH = (environment['admin_username'], environment['admin_password'])
+        yield step_log('Creating Plone site')
+        yield site.create(packages=['genweb.core:default'])
 
-        genweb_base_url = 'http://{}:{}'.format(
-            environment['server'],
-            GENWEB_ZOPE_CLIENT_BASE_PORT + 1
-        )
+        yield step_log('Setting up homepage')
+        yield site.setup_homepage()
 
-        #Create Plone Site
-        print "Creating Plone Site"
-        params = {
-            "site_id": siteid,
-            "title": title,
-            "default_language": language,
-            "setup_content:boolean": True,
-            "extension_ids:list": [
-                'plonetheme.classic:default',
-                'plonetheme.sunburst:default',
-                'genweb.core:default'
-            ],
-            "form.submitted:boolean": True,
-            "submit": "Crear lloc Plone"
-        }
-
-        manage_plone_url = '{}/{}/{}/manage' % (genweb_base_url, mountpoint, siteid)
-
-        req = requests.post('%s/%s/@@plone-addsite' % (genweb_base_url, siteid), params, auth=AUTH)
-        if req.status_code not in [302, 200]:
-            padded_error('Hi ha hagut algun error al afegir el plone a <a href="{}">{}</a>. Ja existeix?'.format(manage_plone_url, manage_plone_url))
-
-        req = requests.get('%s/%s/%s' % (genweb_base_url, siteid, siteid), auth=AUTH,)
-
-        if 'titol-eines-usuari' not in req.content:
-            padded_error('Hi ha hagut algun error instalant el genweb a <a href="{}">{}</a'.format(manage_plone_url, manage_plone_url))
+        yield step_log('Setting up ldap')
+        yield site.setup_ldap(branch=ldap_branch)
 
     def get_instance(self, instance_path):
         mountpoint, plonesite = instance_path.split('/')

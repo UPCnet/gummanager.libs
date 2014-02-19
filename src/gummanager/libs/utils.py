@@ -56,6 +56,22 @@ class RemoteConnection(object):
         return self.get_file(filename) == content
 
 
+def error_log(message):
+    return (0, message)
+
+
+def success_log(message):
+    return (1, message)
+
+
+def message_log(message):
+    return (2, message)
+
+
+def step_log(message):
+    return (3, message)
+
+
 def padded_success(string):
     print term.bold_green + '    {}'.format(string) + term.normal
 
