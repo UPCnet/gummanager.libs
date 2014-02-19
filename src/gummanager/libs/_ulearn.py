@@ -1,4 +1,4 @@
-from gummanager.libs.utils import step_log, error_log, success_log, RemoteConnection
+from gummanager.libs.utils import step_log, error_log, success_log, RemoteConnection, padded_error, padded_success, progress_log, padded_log
 from gummanager.libs.config_files import ULEARN_NGINX_ENTRY
 from gummanager.libs._genweb import GenwebServer, Plone
 import requests
@@ -62,6 +62,23 @@ class ULearnServer(GenwebServer):
         super(ULearnServer, self).__init__(*args, **kwargs)
         self.prefes = RemoteConnection(self.prefe_ssh_user, self.prefe_server)
 
+    def reload_nginx_configuration(self):
+        progress_log('Reloading nginx configuration')
+        padded_log('Testing configuration')
+        code, stdout = self.prefes.execute('/etc/init.d/nginx configtest')
+        if code == 0 and 'done' in stdout:
+            padded_success('Configuration test passed')
+        else:
+            padded_error('Configuration test failed')
+            return None
+
+        code, stdout = self.prefes.execute('/etc/init.d/nginx reload')
+        if code == 0 and 'done' in stdout:
+            padded_success('Nginx reloaded succesfully')
+        else:
+            padded_error('Error reloading nginx')
+            return None
+
     def setup_nginx(self, site, max_url):
 
         nginx_params = {
@@ -97,4 +114,4 @@ class ULearnServer(GenwebServer):
         yield site.setup_max(max_name, oauth_name)
 
         yield step_log('Setting up nginx entry @ {}'.format(self.prefe_server))
-        yield self.setup_nginx(site, max_name)
+        yield self.setup_nginx(site, max_direct_url)
