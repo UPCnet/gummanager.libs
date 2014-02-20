@@ -131,5 +131,8 @@ class ULearnServer(GenwebServer):
         yield step_log('Setting up max')
         yield site.setup_max(max_name, oauth_name)
 
+        yield step_log('Rebuilding catalog')
+        yield site.rebuild_catalog()
+
         yield step_log('Setting up nginx entry @ {}'.format(self.prefe_server))
         yield self.setup_nginx(site, max_direct_url)

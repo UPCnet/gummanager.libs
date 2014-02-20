@@ -79,6 +79,14 @@ class Plone(object):
         else:
             return success_log('Successfully configured homepage'.format(self.site_url))
 
+    def rebuild_catalog(self):
+        recatalog_url = '{}/portal_catalog?manage_catalogRebuild:method=+Clear+and+Rebuild+'.format(self.site_url)
+        resp = requests.get(recatalog_url, auth=self.auth)
+        if resp.status_code not in [302, 200, 204, 201] or 'Catalog Rebuilt' not in resp.content:
+            return error_log('Error on rebuilding catalog'.format(self.site_url))
+        else:
+            return success_log('Successfully rebuild site catalog'.format(self.site_url))
+
     def setup_ldap(self, branch=''):
         setup_view_url = '{}/setupldapexterns'.format(self.site_url)
         req = requests.get(setup_view_url, auth=self.auth)
