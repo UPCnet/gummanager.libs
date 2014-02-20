@@ -111,7 +111,7 @@ class ULearnServer(GenwebServer):
     def get_instance(self, environment, mountpoint, plonesite):
         site = UlearnSite(environment, mountpoint, plonesite, '', '')
         settings = site.get_settings()
-        return site.getSettings()
+        return settings
 
     def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch):
 
