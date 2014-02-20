@@ -38,7 +38,6 @@ class MaxServer(object):
 
     def configure_max_security_settings(self, instance_name):
         try:
-            import ipdb;ipdb.set_trace()
             new_instance_folder = '{}/{}'.format(
                 self.instances_root,
                 instance_name
