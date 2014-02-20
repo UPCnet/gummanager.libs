@@ -10,7 +10,7 @@ from blessings import Terminal
 
 
 term = Terminal()
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 
 class RemoteConnection(object):

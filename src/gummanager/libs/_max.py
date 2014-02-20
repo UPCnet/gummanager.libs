@@ -36,6 +36,14 @@ class MaxServer(object):
                 instances.append(instance)
         return instances
 
+    def set_mongodb_indexes(self, instance_name):
+        new_instance_folder = '{}/{}'.format(
+            self.instances_root,
+            instance_name
+        )
+        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {}/config/max.ini -i {}/config/mongodb.indexes'.format(new_instance_folder))
+        return 'Added' in stdout
+
     def configure_max_security_settings(self, instance_name):
         try:
             new_instance_folder = '{}/{}'.format(
@@ -323,6 +331,17 @@ class MaxServer(object):
 
         ###########################################################################################
 
+        progress_log('Adding indexes to mongodb')
+
+        success = self.set_mongodb_indexes(instance_name)
+        if success:
+            padded_success("Succesfully added indexes")
+            return None
+        else:
+            padded_error("Error on adding indexes")
+
+        ###########################################################################################
+
         progress_log('Changing permissions')
 
         success = self.buildout.change_permissions(self.process_uid)
@@ -335,7 +354,6 @@ class MaxServer(object):
         ###########################################################################################
 
         progress_log('Configuring default permissions settings')
-        import ipdb;ipdb.set_trace()
 
         success = self.configure_max_security_settings(instance_name)
         if success:
@@ -343,4 +361,3 @@ class MaxServer(object):
             return None
         else:
             padded_error("Error on setting permissions settings")
-
