@@ -1,11 +1,11 @@
 Changelog
 =========
 
-1.1 (unreleased)
+1.1 (2014-02-20)
 ----------------
 
-- Nothing changed yet.
-
+* Fix error in method call [Carles Bruguera]
+* Add Manifest.in [Carles Bruguera]
 
 1.0 (2014-02-20)
 ----------------
