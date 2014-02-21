@@ -41,7 +41,7 @@ class MaxServer(object):
             self.instances_root,
             instance_name
         )
-        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {}/config/max.ini -i {}/config/mongodb.indexes'.format(new_instance_folder))
+        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
         return 'Added' in stdout
 
     def configure_max_security_settings(self, instance_name):
