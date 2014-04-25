@@ -128,7 +128,7 @@ class LdapServer(object):
                     if result_type == ldap.RES_SEARCH_ENTRY:
                         result_set.append({
                             'name': result_data[0][1]['cn'][0],
-                            'members': result_data[0][1]['member']
+                            'members': result_data[0][1].get('member', result_data[0][1].get('uniqueMember'))
                         })
             return result_set
         except ldap.LDAPError, e:
