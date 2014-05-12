@@ -65,12 +65,12 @@ MAX_NGINX_ENTRY = """
         proxy_set_header Connection "upgrade";
      }}
 
-    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|admin|auth).*$ {{
-        proxy_set_header X-Virtual-Host-URI $scheme://{server_dns}/{instance_name};
+    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|messages|admin|info).*$ {{
+        proxy_set_header X-Virtual-Host-URI $scheme://{server_dns};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host $http_host;
         proxy_redirect off;
-        rewrite ^/{instance_name}/(.*) /$1 break;
+        rewrite ^/{instance_name}/(.*) /{instance_name}/$1 break;
 
         proxy_pass    http://{server_dns}:{bigmax_port};
      }}
@@ -111,7 +111,7 @@ CIRCUS_NGINX_ENTRY = """
      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
      proxy_set_header X-Forwarded-Proto http;
      proxy_set_header X-Forwarded-Host $host:$server_port;
-     proxy_pass http://localhost:{circus_tcp_endpoint};
+     proxy_pass http://localhost:{circus_httpd_endpoint};
      auth_basic            "Restricted";
      auth_basic_user_file  /var/nginx/config/circus.htpasswd;
     }}

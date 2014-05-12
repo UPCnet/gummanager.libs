@@ -90,10 +90,10 @@ class MaxServer(object):
         status = self.get_status(instance_name)
         instance = self.get_instance(instance_name)
 
-        if status['status'] == 'unknown':
+        if status['status']['max'] == 'unknown':
             padded_log('Circus stopped, starting circusd ...')
-            code, stdout = self.remote.execute('/etc/init.d/oauth_{} start'.format(instance_name))
-        elif status['status'] == 'stopped':
+            code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
+        elif status['status']['max'] == 'stopped':
             padded_log('Osiris stopped, starting process ...')
             circus_control(
                 'start',
@@ -104,10 +104,10 @@ class MaxServer(object):
         padded_log('Waiting for circus...')
         sleep(1)
         status = self.get_status(instance_name)
-        if status['status'] == 'active':
-            padded_success('Oauth instance {} started'.format(instance_name))
+        if status['status']['max'] == 'active':
+            padded_success('Max instance {} started'.format(instance_name))
         else:
-            padded_error('Oauth instance {} not started'.format(instance_name))
+            padded_error('Max instance {} not started'.format(instance_name))
 
     def stop(self, instance_name):
         progress_log('Stopping instance')
@@ -122,9 +122,9 @@ class MaxServer(object):
         sleep(1)
         status = self.get_status(instance_name)
         if status['status'] == 'stopped':
-            padded_success('Osiris OAuth instance {} stopped'.format(instance_name))
+            padded_success('Osiris Max instance {} stopped'.format(instance_name))
         else:
-            padded_error('Osiris OAuth instance {} still active'.format(instance_name))
+            padded_error('Osiris Max instance {} still active'.format(instance_name))
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
@@ -132,26 +132,19 @@ class MaxServer(object):
             endpoint=instance['circus_tcp'],
             process='max'
         )
-        bigmax_status = circus_status(
-            endpoint=instance['circus_tcp'],
-            process='bigmax'
-        )
 
         result_status = OrderedDict()
         result_status['name'] = instance_name
         result_status['server'] = instance['server']
         result_status['status'] = {
             'max': max_status['status'],
-            'bigmax': bigmax_status['status'],
         }
         result_status['pid'] = {
             'max': max_status['pid'],
-            'bigmax': bigmax_status['pid'],
         }
 
         result_status['uptime'] = {
             'max': max_status['uptime'],
-            'bigmax': bigmax_status['uptime'],
         }
 
         return result_status
@@ -264,7 +257,7 @@ class MaxServer(object):
         nginx_params = {
             'instance_name': instance_name,
             'server_dns': self.server_dns,
-            'bigmax_port': int(port_index) + BIGMAX_BASE_PORT,
+            'bigmax_port': BIGMAX_BASE_PORT,
             'max_port': int(port_index) + MAX_BASE_PORT
         }
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
@@ -282,7 +275,7 @@ class MaxServer(object):
         progress_log('Creating nginx entry for circus')
         circus_nginx_params = {
             'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_tcp_endpoint': int(port_index) + CIRCUS_TCP_BASE_PORT
+            'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
 

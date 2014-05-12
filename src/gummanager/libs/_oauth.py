@@ -262,7 +262,7 @@ class OauthServer(object):
         progress_log('Creating nginx entry for circus')
         circus_nginx_params = {
             'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_tcp_endpoint': int(port_index) + CIRCUS_TCP_BASE_PORT
+            'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
 
@@ -297,17 +297,6 @@ class OauthServer(object):
             padded_success("Succesfully created /etc/init.d/oauth_{}".format(instance_name))
         else:
             padded_error('Error when generating init.d script')
-            return None
-
-        ###########################################################################################
-
-        progress_log('Configuring authorized users')
-        success = self.remote.put_file("{}/config/.authorized_users".format(new_instance_folder), "restricted")
-
-        if success:
-            padded_success("Succesfully configured {}/config/.authorized_users".format(new_instance_folder))
-        else:
-            padded_error('Error when configuring authorized users')
             return None
 
         ###########################################################################################
