@@ -1,11 +1,15 @@
 Changelog
 =========
 
-1.2 (unreleased)
+1.2 (2014-05-15)
 ----------------
 
-- Nothing changed yet.
-
+* Fix config files and commands [Carles Bruguera]
+* expect different key for member listing [Carles Bruguera]
+* Fix format syntax [Carles Bruguera]
+* Add mongodb indexes [Carles Bruguera]
+* remove ipdb [Carles Bruguera]
+* Add recatalog step [Carles Bruguera]
 
 1.1 (2014-02-20)
 ----------------
