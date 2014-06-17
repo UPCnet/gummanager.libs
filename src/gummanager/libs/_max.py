@@ -126,6 +126,10 @@ class MaxServer(object):
         else:
             padded_error('Osiris Max instance {} still active'.format(instance_name))
 
+    def test(self, instance_name):
+        # Create test users
+        pass
+
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
         max_status = circus_status(

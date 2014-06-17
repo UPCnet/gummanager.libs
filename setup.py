@@ -43,7 +43,8 @@ setup(name='gummanager.libs',
           'configobj',
           'circus',
           'humanize',
-          'pymongo'
+          'pymongo',
+          'maxclient'
       ],
       entry_points="""
       # -*- Entry points: -*-
