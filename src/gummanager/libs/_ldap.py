@@ -59,7 +59,7 @@ class LdapServer(object):
             'userPassword': self.ssha(password)
         })
 
-        self.ld.add_s(dn, ldif)
+        resp = self.ld.add_s(dn, ldif)
 
     def addGroup(self, group_name, users=[]):
         dn = 'cn={},{}'.format(group_name, self.dn)
