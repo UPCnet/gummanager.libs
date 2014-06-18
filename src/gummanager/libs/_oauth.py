@@ -16,6 +16,7 @@ from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 
 from collections import OrderedDict
 from time import sleep
+import re
 
 
 class OauthServer(object):
@@ -131,7 +132,8 @@ class OauthServer(object):
         }
         instance['ldap'] = {
             'server': ldap['ldap']['server'],
-            'basedn': ldap['ldap']['userbasedn']
+            'basedn': ldap['ldap']['userbasedn'],
+            'branch': re.match(r"ou=(.*?),", ldap['ldap']['userbasedn']).groups()[0]
         }
         instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
         instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
@@ -142,6 +144,13 @@ class OauthServer(object):
         instances = self.get_instances()
         for instance in instances:
             if instance['port_index'] == port_index:
+                return instance
+        return None
+
+    def instance_by_dns(self, dns):
+        instances = self.get_instances()
+        for instance in instances:
+            if instance['server']['dns'] == dns:
                 return instance
         return None
 

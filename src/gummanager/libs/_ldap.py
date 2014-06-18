@@ -4,6 +4,7 @@ import ldap
 import ldap.modlist as modlist
 import os
 from collections import OrderedDict
+from gummanager.libs.utils import admin_password_for_branch
 
 
 LDAP_USER_NOT_FOUND = 0x100
@@ -107,7 +108,7 @@ class LdapServer(object):
         self.addOU(branch_name)
         self.cd('ou={}'.format(branch_name))
         self.addUser('ldap', 'LDAP Access User', 'secret')
-        self.addUser('restricted', 'Restricted User', '{}secret'.format(branch_name))
+        self.addUser('restricted', 'Restricted User', admin_password_for_branch(branch_name))
         self.addGroup('Managers')
         self.addOU('groups')
         self.addOU('users')

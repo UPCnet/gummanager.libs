@@ -14,7 +14,10 @@ from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import circus_status, circus_control
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
+from gummanager.libs.utils import admin_password_for_branch
+from gummanager.libs._utalk import StompClient
 
+from maxclient.rest import MaxClient
 from time import sleep
 import pymongo
 
@@ -25,8 +28,16 @@ class MaxServer(object):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+        self._client = None
         self.remote = RemoteConnection(self.ssh_user, self.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
+
+    def get_client(self, instance_name, username, password):
+        instance_info = self.get_instance(instance_name)
+
+        client = MaxClient(instance_info['server']['dns'])
+        client.login(username=username, password=password)
+        return client
 
     def get_instances(self):
         instances = []
@@ -126,9 +137,18 @@ class MaxServer(object):
         else:
             padded_error('Osiris Max instance {} still active'.format(instance_name))
 
-    def test(self, instance_name):
-        # Create test users
-        pass
+    def test(self, instance_name, ldap_branch):
+        # Get a maxclient for this instance
+        password = admin_password_for_branch(ldap_branch)
+        client = self.get_client(instance_name, username='restricted', password=password)
+
+        # Create users
+        client.people['ulearn.testuser1'].post()
+        client.people['ulearn.testuser2'].post()
+
+        # Create websocket clients
+
+        #testuser1client =
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
