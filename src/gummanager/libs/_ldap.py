@@ -6,6 +6,10 @@ import os
 from collections import OrderedDict
 
 
+LDAP_USER_NOT_FOUND = 0x100
+LDAP_INVALID_CREDENTIALS = 0x101
+
+
 class LdapServer(object):
     def __init__(self, *args, **kwargs):
         for k, v in kwargs.items():
@@ -16,10 +20,34 @@ class LdapServer(object):
 
     def connect(self):
         self.ld = ldap.initialize(self.ldap_uri)
-        self.ld.simple_bind_s("{admin_cn},{base_dn}".format(**self.__dict__), self.admin_password)
+        self.cd('/')
+        self.authenticate(self.admin_cn, self.admin_password)
+
+    def authenticate(self, username, password, branch=None):
+        self.cd('/')
+        if branch:
+            self.cd_branch(branch)
+            if not self.exists(username, branch):
+                return LDAP_USER_NOT_FOUND
+
+        user_dn = "cn={},{}".format(username, self.dn)
+
+        try:
+            self.ld.simple_bind_s(user_dn, password)
+            return True
+        except:
+            return LDAP_INVALID_CREDENTIALS
 
     def disconnect(self):
         self.ld.unbind_s()
+
+    def exists(self, username, branch):
+        users = self.get_branch_users(branch)
+        return len([a for a in users if a['name'] == username]) > 0
+
+    def cd_branch(self, branch_name):
+        self.cd('/')
+        self.cd('ou=users,ou={}'.format(branch_name))
 
     def cd(self, dn):
         if dn == '/':
