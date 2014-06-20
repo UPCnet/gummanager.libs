@@ -15,11 +15,12 @@ from gummanager.libs.utils import circus_status, circus_control
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import admin_password_for_branch
-from gummanager.libs._utalk import StompClient
+from gummanager.libs._utalk import UTalkClient, get_servers_from_max, getToken
 
 from maxclient.rest import MaxClient
 from time import sleep
 import pymongo
+import gevent
 
 
 class MaxServer(object):
@@ -139,6 +140,7 @@ class MaxServer(object):
 
     def test(self, instance_name, ldap_branch):
         # Get a maxclient for this instance
+        instance_info = self.get_instance(instance_name)
         password = admin_password_for_branch(ldap_branch)
         client = self.get_client(instance_name, username='restricted', password=password)
 
@@ -146,9 +148,33 @@ class MaxServer(object):
         client.people['ulearn.testuser1'].post()
         client.people['ulearn.testuser2'].post()
 
-        # Create websocket clients
+        def getUtalkClient(maxserver, username, password):
+            oauth_server, stomp_server = get_servers_from_max(maxserver)
+            token = getToken(username, oauth_server, password=password)
+            client = UTalkClient(
+                host=stomp_server,
+                username=username,
+                passcode=token
+            )
+            return client
 
-        #testuser1client =
+        # Create websocket clients
+        client1 = getUtalkClient(
+            instance_info['server']['dns'],
+            'ulearn.testuser1',
+            'UTestuser1'
+        )
+        client2 = getUtalkClient(
+            instance_info['server']['dns'],
+            'ulearn.testuser1',
+            'UTestuser2'
+        )
+
+        arguments1 = []
+        thread1 = gevent.spawn(client1.test, *arguments1)
+
+        arguments2 = []
+        thread2 = gevent.spawn(client2.test, *arguments2)
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)

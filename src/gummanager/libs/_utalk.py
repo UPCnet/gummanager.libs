@@ -25,6 +25,40 @@ def random_str(length):
     return ''.join(random.choice(letters) for c in range(length))
 
 
+def get_servers_from_max(maxserver):
+    response = requests.get('{}/info'.format(maxserver), verify=False)
+    oauth_server = response.json()['max.oauth_server']
+    stomp_server = '{}/stomp'.format(maxserver.replace('http', 'ws'))
+    return oauth_server, stomp_server
+
+
+def getToken(username, oauth_server, password=None):
+    if password is None:
+        print '> Enter password for user {}'.format(username)
+        password = getpass.getpass()
+
+    payload = {
+        "grant_type": 'password',
+        "client_id": 'MAX',
+        "scope": 'widgetcli',
+        "username": username,
+        "password": password
+    }
+    req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
+    response = json.loads(req.text)
+    token = False
+    if req.status_code == 200:
+        token = response.get("access_token", False)
+        # Fallback to legacy oauth server
+        if not token:
+            token = response.get("oauth_token")
+    if token:
+        return token
+    else:
+        print "Bad username or password."
+        sys.exit(1)
+
+
 def forge_message(command, headers, body):
     frame = Frame(command, headers, body)
     message = convert_frame_to_lines(frame)
@@ -119,36 +153,6 @@ class UTalkClient(object):
 
 def main(argv=sys.argv):
 
-    def get_servers_from_max(maxserver):
-        response = requests.get('{}/info'.format(maxserver), verify=False)
-        oauth_server = response.json()['max.oauth_server']
-        stomp_server = '{}/stomp'.format(maxserver.replace('http', 'ws'))
-        return oauth_server, stomp_server
-
-    def getToken(username, oauth_server):
-        print '> Enter password for user {}'.format(username)
-        password = getpass.getpass()
-
-        payload = {
-            "grant_type": 'password',
-            "client_id": 'MAX',
-            "scope": 'widgetcli',
-            "username": username,
-            "password": password
-        }
-        req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
-        response = json.loads(req.text)
-        token = False
-        if req.status_code == 200:
-            token = response.get("access_token", False)
-            # Fallback to legacy oauth server
-            if not token:
-                token = response.get("oauth_token")
-        if token:
-            return token
-        else:
-            print "Bad username or password."
-            sys.exit(1)
 
     arguments = docopt(__doc__, version='UTalk websocket client 1.0')
 
