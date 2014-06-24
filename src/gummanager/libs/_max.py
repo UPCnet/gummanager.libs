@@ -30,12 +30,12 @@ class MaxServer(object):
             setattr(self, k, v)
 
         self._client = None
+        self._instances = {}
         self.remote = RemoteConnection(self.ssh_user, self.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
 
     def get_client(self, instance_name, username, password):
         instance_info = self.get_instance(instance_name)
-
         client = MaxClient(instance_info['server']['dns'])
         client.login(username=username, password=password)
         return client
@@ -141,12 +141,8 @@ class MaxServer(object):
     def test(self, instance_name, ldap_branch):
         # Get a maxclient for this instance
         instance_info = self.get_instance(instance_name)
-        password = admin_password_for_branch(ldap_branch)
-        client = self.get_client(instance_name, username='restricted', password=password)
-
-        # Create users
-        client.people['ulearn.testuser1'].post()
-        client.people['ulearn.testuser2'].post()
+        restricted_password = admin_password_for_branch(ldap_branch)
+        client = self.get_client(instance_name, username='restricted', password=restricted_password)
 
         def getUtalkClient(maxserver, username, password):
             oauth_server, stomp_server = get_servers_from_max(maxserver)
@@ -158,23 +154,67 @@ class MaxServer(object):
             )
             return client
 
-        # Create websocket clients
-        client1 = getUtalkClient(
-            instance_info['server']['dns'],
-            'ulearn.testuser1',
-            'UTestuser1'
-        )
-        client2 = getUtalkClient(
-            instance_info['server']['dns'],
-            'ulearn.testuser1',
-            'UTestuser2'
+        test_users = [
+            ('ulearn.testuser1', 'UTestuser1'),
+            ('ulearn.testuser2', 'UTestuser2')
+        ]
+
+        utalk_clients = []
+        max_clients = []
+
+        for user, password in test_users:
+            max_clients.append(self.get_client(
+                instance_name,
+                username=user,
+                password=password)
+            )
+
+            # Create websocket clients
+            utalk_clients.append(getUtalkClient(
+                instance_info['server']['dns'],
+                user,
+                password
+            ))
+
+        # Create users
+        client.people['ulearn.testuser1'].post()
+        client.people['ulearn.testuser2'].post()
+
+        # user 1 creates conversation with user 2
+        conversation = max_clients[0].conversations.post(
+            contexts=[{"objectType": "conversation", "participants": [test_users[0][0], test_users[1][0]]}],
+            object_content='Initial message'
         )
 
-        arguments1 = []
-        thread1 = gevent.spawn(client1.test, *arguments1)
+        # Prepare test messages for clients
+        # First argument are messages to send (conversation, message)
+        # Second argument are messages to expect (conversation, sender, message)
+        arguments1 = [
+            [
+                (conversation["id"], 'First message'),
+                (conversation["id"], 'Second message')
+            ],
+            [
+                (conversation["id"], test_users[1][0], 'First message'),
+                (conversation["id"], test_users[1][0], 'Second message')
+            ]
+        ]
 
-        arguments2 = []
-        thread2 = gevent.spawn(client2.test, *arguments2)
+        arguments2 = [
+            [
+                (conversation["id"], 'First message'),
+                (conversation["id"], 'Second message')
+            ],
+            [
+                (conversation["id"], test_users[0][0], 'First message'),
+                (conversation["id"], test_users[0][0], 'Second message')
+            ]
+        ]
+
+        thread1 = gevent.spawn(utalk_clients[0].test, *arguments1)
+        thread2 = gevent.spawn(utalk_clients[1].test, *arguments2)
+
+        gevent.joinall([thread1, thread2])
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
@@ -200,26 +240,28 @@ class MaxServer(object):
         return result_status
 
     def get_instance(self, instance_name):
-        max_ini = self.buildout.config_files.get(instance_name, {}).get('max.ini', '')
-        if not max_ini:
-            return {}
+        if instance_name not in self._instances:
+            max_ini = self.buildout.config_files.get(instance_name, {}).get('max.ini', '')
+            if not max_ini:
+                return {}
 
-        maxconfig = parse_ini_from(max_ini)
-        port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
+            maxconfig = parse_ini_from(max_ini)
+            port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
 
-        instance = OrderedDict()
-        instance['name'] = instance_name
-        instance['port_index'] = port_index
-        instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
-        instance['server'] = {
-            'direct': 'http://{}:{}'.format(self.server, maxconfig['server:main']['port']),
-            'dns': maxconfig['app:main']['max.server']
-        }
-        instance['oauth'] = maxconfig['app:main']['max.oauth_server']
-        instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-        instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
+            instance = OrderedDict()
+            instance['name'] = instance_name
+            instance['port_index'] = port_index
+            instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
+            instance['server'] = {
+                'direct': 'http://{}:{}'.format(self.server, maxconfig['server:main']['port']),
+                'dns': maxconfig['app:main']['max.server']
+            }
+            instance['oauth'] = maxconfig['app:main']['max.oauth_server']
+            instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
+            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
 
-        return instance
+            self._instances[instance_name] = instance
+        return self._instances[instance_name]
 
     def instance_by_port_index(self, port_index):
         instances = self.get_instances()

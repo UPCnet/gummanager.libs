@@ -18,6 +18,8 @@ from maxcarrot import RabbitMessage
 import getpass
 import requests
 import json
+import gevent
+from gevent.monkey import patch_all
 
 
 def random_str(length):
@@ -97,6 +99,10 @@ class StompClient(object):
         print '> Listening on {} messages'.format(self.username)
         print
 
+    def send(self, headers, body):
+        message = forge_message('MESSAGE', headers, body)
+        self.ws.send(message)
+
     def receive(self, headers, body):
         message = RabbitMessage.unpack(body)
         destination = re.search(r'([0-9a-f]+).(?:notifications|messages)', headers['destination']).groups()[0]
@@ -113,6 +119,8 @@ class UTalkClient(object):
         self.stomp = StompClient(username, passcode, self)
 
     def connect(self):
+        patch_all()
+
         self.url = '/'.join([
             self.host,
             str(random.randint(0, 1000)),
@@ -138,8 +146,25 @@ class UTalkClient(object):
             if command == 'CONNECTED':
                 self.stomp.subscribe()
             if command == 'MESSAGE':
+                self.received_messages += 1
                 decoded_message = json.loads(body.replace('\\"', '"').replace('\u0000', ''))
                 self.stomp.receive(headers, decoded_message)
+
+    def send_message(self, conversation, text):
+        message = RabbitMessage()
+        message.prepare()
+        message['source'] = 'test'
+        message['data'] = {'text': text}
+        message['action'] = 'add'
+        message['object'] = 'message'
+        message['user'] = {'username': self.username}
+
+        headers = {
+            "subscription": "sub-0",
+            "destination": "/exchange/{}.publish/{}.messages".format(self.username, conversation),
+            "message-id": message['uuid']
+        }
+        self.stomp.send(headers, json.dumps(message.packed))
 
     def on_error(self, ws, error):
         print '> ERROR {}'.format(error)
@@ -150,9 +175,22 @@ class UTalkClient(object):
     def on_open(self, ws):
         print '> Opened websocket connection to {}'.format(self.url)
 
+    def test(self, send=[], expect=[]):
+        self.to_send = send
+        self.to_expect = expect
+
+        expected_messages = len(self.to_expect), len(self.to_send) * 2
+        self.received_messages = 0
+
+        self.connect()
+        for conversation_id, text in self.to_send:
+            self.send_message(conversation_id, text)
+
+        while self.received_messages < expected_messages:
+            gevent.sleep()
+
 
 def main(argv=sys.argv):
-
 
     arguments = docopt(__doc__, version='UTalk websocket client 1.0')
 

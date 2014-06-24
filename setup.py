@@ -44,7 +44,10 @@ setup(name='gummanager.libs',
           'circus',
           'humanize',
           'pymongo',
-          'maxclient'
+          'maxclient',
+          'websocket-client',
+          'stomp.py',
+          'maxcarrot'
       ],
       entry_points="""
       # -*- Entry points: -*-
