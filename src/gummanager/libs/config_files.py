@@ -124,6 +124,19 @@ ULEARN_NGINX_ENTRY = """
         rewrite ^([^.]*[^/])$ $1/ permanent;
     }}
 
+    location ~* ^/{instance_name}/max/stomp {
+        proxy_set_header X-Virtual-Host-URI $scheme://$host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        rewrite ^/{instance_name}/max/(.*) /$1 break;
+        proxy_pass    http://rabbitmq_web_stomp_server;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+     }
+
+
     location ~ ^/{instance_name}/max/(.*) {{
         proxy_set_header X-Virtual-Host-URI $scheme://$host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
