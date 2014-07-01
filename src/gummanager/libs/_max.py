@@ -140,6 +140,106 @@ class MaxServer(object):
         else:
             padded_error('Osiris Max instance {} still active'.format(instance_name))
 
+    def test_activity(self, instance_name, ldap_branch):
+
+        progress_log('Testing UTalk activity notifications')
+
+        # Get a maxclient for this instance
+        padded_log("Getting instance information")
+        instance_info = self.get_instance(instance_name)
+        restricted_password = admin_password_for_branch(ldap_branch)
+        client = self.get_client(instance_name, username='restricted', password=restricted_password)
+
+        padded_log("Setting up test clients")
+        test_users = [
+            ('ulearn.testuser1', 'UTestuser1'),
+            ('ulearn.testuser2', 'UTestuser2')
+        ]
+
+        utalk_clients = []
+        max_clients = []
+
+        # Syncronization primitives
+        wait_for_others = AsyncResult()
+        counter = ReadyCounter(wait_for_others)
+
+        for user, password in test_users:
+            max_clients.append(self.get_client(
+                instance_name,
+                username=user,
+                password=password)
+            )
+
+            # Create websocket clients
+            utalk_clients.append(getUtalkClient(
+                instance_info['server']['dns'],
+                instance_name,
+                user,
+                password,
+                quiet=False
+            ))
+            counter.add()
+
+        # Create users
+        padded_log("Creating users and conversations")
+        client.people['ulearn.testuser1'].post()
+        client.people['ulearn.testuser2'].post()
+
+        # Admin creates context with notifications enabled and subscribes users to it
+        context = client.contexts.post(url='http://testcontext', displayName='Test Context', notifications=True)
+        client.people['ulearn.testuser1'].subscriptions.post(object_url='http://testcontext')
+        client.people['ulearn.testuser2'].subscriptions.post(object_url='http://testcontext')
+
+        def post_activity():
+            max_clients[0].people['ulearn.testuser1'].activities.post(
+                object_content='Hola',
+                contexts=[{"url": "http://testcontext", "objectType": "context"}]
+            )
+
+        # Prepare test messages for clients
+        # First argument are messages to send (conversation, message)
+        # Second argument are messages to expect (conversation, sender, message)
+        # Third argument is a syncronization event to wait for all clients to be listening
+        # Fourth argument is a method to trigger when client ready
+
+        arguments1 = [
+            [
+
+            ],
+            [
+                ('test', 'test')
+            ],
+            counter,
+            post_activity
+        ]
+
+        arguments2 = [
+            [
+
+            ],
+            [
+                ('test', 'test')
+            ],
+            counter,
+            None
+        ]
+
+        padded_log("Starting websockets and waiting for messages . . .")
+
+        greenlets = [
+            gevent.spawn(utalk_clients[0].test, *arguments1),
+            gevent.spawn(utalk_clients[1].test, *arguments2)
+        ]
+
+        gevent.joinall(greenlets, timeout=20, raise_error=True)
+
+        success = None not in [g.value for g in greenlets]
+
+        if success:
+            padded_success('Websocket test passed')
+        else:
+            padded_error('Websocket test failed, Timed out')
+
     def test(self, instance_name, ldap_branch):
 
         progress_log('Testing UTalk websocket communication')

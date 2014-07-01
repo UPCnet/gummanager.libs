@@ -109,6 +109,10 @@ class StompClient(object):
         for conversation_id, text in self.utalk.to_send:
             self.utalk.send_message(conversation_id, text)
 
+        if self.utalk.trigger is not None:
+            print 'here2'
+            self.utalk.trigger()
+
     def send(self, headers, body):
         message = forge_message('SEND', headers, body)
         self.ws.send(message)
@@ -193,10 +197,11 @@ class UTalkClient(object):
     def on_open(self, ws):
         self.log('> Opened websocket connection to {}'.format(self.url))
 
-    def test(self, send=[], expect=[], ready=None):
+    def test(self, send=[], expect=[], ready=None, trigger=None):
         self.to_send = send
         self.to_expect = expect
         self.wait_send = ready
+        self.trigger = trigger
 
         self.expected_messages = len(self.to_expect) + len(self.to_send) * 2
         self.received_messages = 0
