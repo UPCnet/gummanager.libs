@@ -61,66 +61,80 @@ def getToken(username, oauth_server, password=None):
         sys.exit(1)
 
 
-def forge_message(command, headers, body):
+def forge_message(command, headers, body=''):
     frame = Frame(command, headers, body)
     message = convert_frame_to_lines(frame)
-    return '["' + ''.join(message[:-1]) + '"]'
+    return '["' + ''.join(message[:-1]) + '\u0000"]'
 
 
 class StompClient(object):
-    def __init__(self, username, passcode, sockjs_client):
+    def __init__(self, username, passcode, utalk_client, domain):
         self.username = username
         self.passcode = passcode
-        self.sockjs = sockjs_client
+        self.utalk = utalk_client
+        self.domain = domain
 
     @property
     def ws(self):
-        return self.sockjs.ws
+        return self.utalk.ws
+
+    @property
+    def log(self):
+        return self.utalk.log
 
     def connect(self):
         headers = OrderedDict()
-        headers["login"] = self.username
+        headers["login"] = self.domain + ':' + self.username
         headers["passcode"] = self.passcode
         headers["host"] = "/"
         headers["accept-version"] = "1.1,1.0"
         headers["heart-beat"] = "0,0"
-
-        message = forge_message('CONNECT', headers, '\u0000')
+        message = forge_message('CONNECT', headers)
         self.ws.send(message)
-        print '> Started stomp session as {}'.format(self.username)
+        self.log('> Started stomp session as {}'.format(self.username))
 
     def subscribe(self):
         headers = OrderedDict()
         headers["id"] = "sub-0",
         headers["destination"] = "/exchange/{}.subscribe".format(self.username),
 
-        message = forge_message('SUBSCRIBE', headers, '\u0000')
+        message = forge_message('SUBSCRIBE', headers)
         self.ws.send(message)
-        print '> Listening on {} messages'.format(self.username)
-        print
+
+        self.log('> Listening on {} messages'.format(self.username))
+        self.utalk.wait_send.ready()
+        gevent.sleep(1)
+        self.utalk.wait_send.event.get()
+        self.log("start sending {} messages".format(self.username))
+        for conversation_id, text in self.utalk.to_send:
+            self.utalk.send_message(conversation_id, text)
 
     def send(self, headers, body):
-        message = forge_message('MESSAGE', headers, body)
+        message = forge_message('SEND', headers, body)
         self.ws.send(message)
 
     def receive(self, headers, body):
         message = RabbitMessage.unpack(body)
-        destination = re.search(r'([0-9a-f]+).(?:notifications|messages)', headers['destination']).groups()[0]
-        if message['action'] == 'add' and message['object'] == 'message':
-            print '> {}@{}: {}'.format(message['user']['username'], destination, message['data']['text'])
+        #if message['action'] == 'add' and message['object'] == 'message':
+        #    self.log('')
 
 
 class UTalkClient(object):
 
-    def __init__(self, host, username, passcode):
+    def __init__(self, host, username, passcode, domain, quiet=False):
         self.host = host
         self.username = username
         self.passcode = passcode
-        self.stomp = StompClient(username, passcode, self)
+        self.stomp = StompClient(username, passcode, self, domain)
+        self.domain = domain
+        self.quiet = quiet
+
+    def log(self, message):
+        if not self.quiet:
+            print message
 
     def connect(self):
         patch_all()
-
         self.url = '/'.join([
             self.host,
             str(random.randint(0, 1000)),
@@ -145,10 +159,13 @@ class UTalkClient(object):
 
             if command == 'CONNECTED':
                 self.stomp.subscribe()
+
             if command == 'MESSAGE':
                 self.received_messages += 1
                 decoded_message = json.loads(body.replace('\\"', '"').replace('\u0000', ''))
                 self.stomp.receive(headers, decoded_message)
+                if self.received_messages == self.expected_messages:
+                    self.ws.close()
 
     def send_message(self, conversation, text):
         message = RabbitMessage()
@@ -160,34 +177,32 @@ class UTalkClient(object):
         message['user'] = {'username': self.username}
 
         headers = {
-            "subscription": "sub-0",
             "destination": "/exchange/{}.publish/{}.messages".format(self.username, conversation),
-            "message-id": message['uuid']
         }
-        self.stomp.send(headers, json.dumps(message.packed))
+        # Convert to json and strip  spaces
+        json_message = json.dumps(message.packed, separators=(',', ':'))
+        json_message = json_message.replace('"', '\\"')
+        self.stomp.send(headers, json_message)
 
     def on_error(self, ws, error):
-        print '> ERROR {}'.format(error)
+        self.log('> ERROR {}'.format(error))
 
     def on_close(self, ws):
-        print "> Closed websocket connection"
+        self.log("> Closed websocket connection")
 
     def on_open(self, ws):
-        print '> Opened websocket connection to {}'.format(self.url)
+        self.log('> Opened websocket connection to {}'.format(self.url))
 
-    def test(self, send=[], expect=[]):
+    def test(self, send=[], expect=[], ready=None):
         self.to_send = send
         self.to_expect = expect
+        self.wait_send = ready
 
-        expected_messages = len(self.to_expect), len(self.to_send) * 2
+        self.expected_messages = len(self.to_expect) + len(self.to_send) * 2
         self.received_messages = 0
 
         self.connect()
-        for conversation_id, text in self.to_send:
-            self.send_message(conversation_id, text)
-
-        while self.received_messages < expected_messages:
-            gevent.sleep()
+        return True
 
 
 def main(argv=sys.argv):
