@@ -24,15 +24,15 @@ class LdapServer(object):
         self.cd('/')
         self.authenticate(self.admin_cn, self.admin_password)
 
-    def authenticate(self, username, password, branch=None):
+    def authenticate(self, username, password, branch=None, userdn=True):
         self.cd('/')
         if branch:
-            self.cd_branch(branch)
-            if not self.exists(username, branch):
-                return LDAP_USER_NOT_FOUND
+            self.cd_branch(branch, userdn)
+            if userdn:
+                if not self.exists(username, branch):
+                    return LDAP_USER_NOT_FOUND
 
         user_dn = "cn={},{}".format(username, self.dn)
-
         try:
             self.ld.simple_bind_s(user_dn, password)
             return True
@@ -46,9 +46,12 @@ class LdapServer(object):
         users = self.get_branch_users(branch)
         return len([a for a in users if a['name'] == username]) > 0
 
-    def cd_branch(self, branch_name):
+    def cd_branch(self, branch_name, users=True):
         self.cd('/')
-        self.cd('ou=users,ou={}'.format(branch_name))
+        if users:
+            self.cd('ou=users,ou={}'.format(branch_name))
+        else:
+            self.cd('ou={}'.format(branch_name))
 
     def cd(self, dn):
         if dn == '/':
