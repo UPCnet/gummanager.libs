@@ -15,8 +15,7 @@ from gummanager.libs.utils import circus_status, circus_control
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import admin_password_for_branch
-from gummanager.libs.utils import getUtalkClient
-from gummanager.libs.utils import ReadyCounter
+
 
 from maxclient.rest import MaxClient
 from time import sleep
@@ -240,101 +239,6 @@ class MaxServer(object):
         else:
             padded_error('Websocket test failed, Timed out')
 
-    def test(self, instance_name, ldap_branch):
-
-        progress_log('Testing UTalk websocket communication')
-
-        # Get a maxclient for this instance
-        padded_log("Getting instance information")
-        instance_info = self.get_instance(instance_name)
-        restricted_password = admin_password_for_branch(ldap_branch)
-        client = self.get_client(instance_name, username='restricted', password=restricted_password)
-
-        padded_log("Setting up test clients")
-        test_users = [
-            ('ulearn.testuser1', 'UTestuser1'),
-            ('ulearn.testuser2', 'UTestuser2')
-        ]
-
-        utalk_clients = []
-        max_clients = []
-
-        # Syncronization primitives
-        wait_for_others = AsyncResult()
-        counter = ReadyCounter(wait_for_others)
-
-        for user, password in test_users:
-            max_clients.append(self.get_client(
-                instance_name,
-                username=user,
-                password=password)
-            )
-
-            # Create websocket clients
-            utalk_clients.append(getUtalkClient(
-                instance_info['server']['dns'],
-                instance_name,
-                user,
-                password,
-                quiet=True
-            ))
-            counter.add()
-
-        # Create users
-        padded_log("Creating users and conversations")
-        client.people['ulearn.testuser1'].post()
-        client.people['ulearn.testuser2'].post()
-
-        # user 1 creates conversation with user 2
-        conversation = max_clients[0].conversations.post(
-            contexts=[{"objectType": "conversation", "participants": [test_users[0][0], test_users[1][0]]}],
-            object_content='Initial message'
-        )
-
-        # Prepare test messages for clients
-        # First argument are messages to send (conversation, message)
-        # Second argument are messages to expect (conversation, sender, message)
-        # Third argument is a syncronization event to wait for all clients to be listening
-
-        arguments1 = [
-            [
-                (conversation['contexts'][0]['id'], 'First message from 1'),
-                (conversation['contexts'][0]['id'], 'Second message from 1')
-            ],
-            [
-                (conversation['contexts'][0]['id'], test_users[1][0], 'First message from 2'),
-                (conversation['contexts'][0]['id'], test_users[1][0], 'Second message from 2')
-            ],
-            counter,
-        ]
-
-        arguments2 = [
-            [
-                (conversation['contexts'][0]['id'], 'First message from 2'),
-                (conversation['contexts'][0]['id'], 'Second message from 2')
-            ],
-            [
-                (conversation['contexts'][0]['id'], test_users[0][0], 'First message from 1'),
-                (conversation['contexts'][0]['id'], test_users[0][0], 'Second message from 1')
-            ],
-            counter
-        ]
-
-        padded_log("Starting websockets and waiting for messages . . .")
-
-        greenlets = [
-            gevent.spawn(utalk_clients[0].test, *arguments1),
-            gevent.spawn(utalk_clients[1].test, *arguments2)
-        ]
-
-        gevent.joinall(greenlets, timeout=20, raise_error=True)
-
-        success = None not in [g.value for g in greenlets]
-
-        if success:
-            padded_success('Websocket test passed')
-        else:
-            padded_error('Websocket test failed, Timed out')
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)

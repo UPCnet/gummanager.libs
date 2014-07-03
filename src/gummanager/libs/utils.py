@@ -7,7 +7,6 @@ import datetime
 import humanize
 import re
 from blessings import Terminal
-from gummanager.libs._utalk import UTalkClient, get_servers_from_max, getToken
 
 term = Terminal()
 DEBUG_MODE = False
@@ -25,19 +24,6 @@ class ReadyCounter(object):
         self.count -= 1
         if self.count == 0:
             self.event.set()
-
-
-def getUtalkClient(maxserver, instance_name, username, password, quiet=False):
-    oauth_server, stomp_server = get_servers_from_max(maxserver)
-    token = getToken(username, oauth_server, password=password)
-    client = UTalkClient(
-        host=stomp_server,
-        username=username,
-        passcode=token,
-        domain=instance_name,
-        quiet=quiet
-    )
-    return client
 
 
 class RemoteConnection(object):

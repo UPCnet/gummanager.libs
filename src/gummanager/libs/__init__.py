@@ -11,6 +11,7 @@ from _oauth import OauthServer
 from _max import MaxServer
 from _genweb import GenwebServer
 from _ulearn import ULearnServer
+from _utalk import UTalkServer
 
 # Patch for sh to accept a partial as a argument
 

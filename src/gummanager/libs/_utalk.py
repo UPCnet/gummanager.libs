@@ -19,7 +19,144 @@ import getpass
 import requests
 import json
 import gevent
-from gevent.monkey import patch_all
+from gevent.monkey import patch_socket
+from gevent.event import AsyncResult
+from gummanager.libs.utils import padded_error, padded_success, progress_log, padded_log
+from gummanager.libs.utils import admin_password_for_branch
+from gummanager.libs.utils import ReadyCounter
+
+
+class UTalkServer(object):
+
+    def __init__(self, *args, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+    def getDomainInfo(self, domain):
+        max_info = self.maxserver.get_instance(domain)
+        oauth_info = self.oauthserver.instance_by_dns(max_info['oauth'])
+        return {
+            'max': max_info,
+            'oauth': oauth_info
+        }
+
+    def getUtalkClient(self, maxserver, instance_name, username, password, quiet=False):
+        oauth_server, stomp_server = get_servers_from_max(maxserver)
+        token = getToken(username, oauth_server, password=password)
+        client = UTalkClient(
+            host=stomp_server,
+            username=username,
+            passcode=token,
+            domain=instance_name,
+            quiet=quiet
+        )
+        return client
+
+    def test(self, domain):
+        progress_log('Testing UTalk websocket communication')
+
+        # Get a maxclient for this instance
+        padded_log("Getting instance information")
+
+        domain_info = self.getDomainInfo(domain)
+        restricted_password = admin_password_for_branch(domain_info['oauth']['ldap']['branch'])
+        client = self.maxserver.get_client(domain, username='restricted', password=restricted_password)
+
+        padded_log("Setting up test clients")
+        test_users = [
+            ('ulearn.testuser1', 'UTestuser1'),
+            ('ulearn.testuser2', 'UTestuser2')
+        ]
+
+        utalk_clients = []
+        max_clients = []
+
+        # Syncronization primitives
+        wait_for_others = AsyncResult()
+        counter = ReadyCounter(wait_for_others)
+
+        for user, password in test_users:
+            max_clients.append(self.maxserver.get_client(
+                domain,
+                username=user,
+                password=password)
+            )
+
+            # Create websocket clients
+            utalk_clients.append(self.getUtalkClient(
+                domain_info['max']['server']['dns'],
+                domain,
+                user,
+                password,
+                quiet=True
+            ))
+            counter.add()
+
+        # Create users
+        padded_log("Creating users and conversations")
+        client.people['ulearn.testuser1'].post()
+        client.people['ulearn.testuser2'].post()
+
+        # user 1 creates conversation with user 2
+        conversation = max_clients[0].conversations.post(
+            contexts=[{"objectType": "conversation", "participants": [test_users[0][0], test_users[1][0]]}],
+            object_content='Initial message'
+        )
+        conversation_id = conversation['contexts'][0]['id']
+
+        # Prepare test messages for clients
+        # First argument are messages to send (conversation, message)
+        # Second argument are messages to expect (conversation, sender, message)
+        # Third argument is a syncronization event to wait for all clients to be listening
+
+        arguments1 = [
+            [
+                (conversation_id, 'First message from 1'),
+                (conversation_id, 'Second message from 1')
+            ],
+            [
+                (conversation_id, test_users[1][0], 'First message from 2'),
+                (conversation_id, test_users[1][0], 'Second message from 2')
+            ],
+            counter,
+        ]
+
+        arguments2 = [
+            [
+                (conversation_id, 'First message from 2'),
+                (conversation_id, 'Second message from 2')
+            ],
+            [
+                (conversation_id, test_users[0][0], 'First message from 1'),
+                (conversation_id, test_users[0][0], 'Second message from 1')
+            ],
+            counter
+        ]
+
+        padded_log("Starting websockets and waiting for messages . . .")
+
+        greenlets = [
+            gevent.spawn(utalk_clients[0].test, *arguments1),
+            gevent.spawn(utalk_clients[1].test, *arguments2)
+        ]
+
+        gevent.joinall(greenlets, timeout=30, raise_error=True)
+        success = None not in [g.value for g in greenlets]
+
+        # undo gevent patching
+        import socket
+        reload(socket)
+
+        # Cleanup
+        max_clients[0].conversations[conversation_id].delete()
+
+        #client.people['ulearn.testuser1'].delete()
+        #client.people['ulearn.testuser2'].delete()
+
+        if success:
+            padded_success('Websocket test passed')
+        else:
+            padded_error('Websocket test failed, Timed out')
 
 
 def random_str(length):
@@ -138,7 +275,7 @@ class UTalkClient(object):
             print message
 
     def connect(self):
-        patch_all()
+        patch_socket()
         self.url = '/'.join([
             self.host,
             str(random.randint(0, 1000)),
@@ -155,6 +292,7 @@ class UTalkClient(object):
         self.ws.run_forever()
 
     def on_message(self, ws, message):
+        print message
         if message[0] == 'o':
             self.stomp.connect()
         if message[0] == 'a':
