@@ -19,19 +19,21 @@ class LdapServer(object):
         self.ldap_uri = '{server}:{port}'.format(**kwargs)
         self.leaf_dn = ''
 
-    def connect(self):
+    def connect(self, auth=True):
         self.ld = ldap.initialize(self.ldap_uri)
         self.cd('/')
-        self.authenticate(self.admin_cn, self.admin_password)
+        if auth:
+            self.authenticate(self.admin_cn, self.admin_password)
 
-    def authenticate(self, username, password, branch=None, userdn=True):
+    def authenticate(self, username, password, branch=None, userdn=False):
         self.cd('/')
         if branch:
             self.cd_branch(branch, userdn)
             if userdn:
                 if not self.exists(username, branch):
                     return LDAP_USER_NOT_FOUND
-
+                self.disconnect()
+                self.connect(auth=False)
         user_dn = "cn={},{}".format(username, self.dn)
         try:
             self.ld.simple_bind_s(user_dn, password)
