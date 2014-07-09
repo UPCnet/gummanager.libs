@@ -96,6 +96,11 @@ class LdapServer(object):
 
         resp = self.ld.add_s(dn, ldif)
 
+    def delUser(self, user_name):
+        dn = 'cn={},{}'.format(user_name, self.dn)
+
+        resp = self.ld.delete_s(dn)
+
     def addGroup(self, group_name, users=[]):
         dn = 'cn={},{}'.format(group_name, self.dn)
 
@@ -119,7 +124,7 @@ class LdapServer(object):
         self.addOU('groups')
         self.addOU('users')
 
-    def get_branch_users(self, branch_name):
+    def get_branch_users(self, branch_name, filter=None):
         self.cd('/')
         self.cd('ou=users,ou={}'.format(branch_name))
         try:
@@ -136,10 +141,12 @@ class LdapServer(object):
                     break
                 else:
                     if result_type == ldap.RES_SEARCH_ENTRY:
-                        result_set.append({
+                        entry = {
                             'name': result_data[0][1]['cn'][0],
                             'sn': result_data[0][1]['sn'][0]
-                        })
+                        }
+                        if not filter or filter.lower() in entry['name'].lower() + entry['sn'].lower():
+                            result_set.append(entry)
             return result_set
         except ldap.LDAPError, e:
             print e, branch_name
