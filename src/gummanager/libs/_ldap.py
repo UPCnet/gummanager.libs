@@ -118,7 +118,7 @@ class LdapServer(object):
         self.cd('/')
         self.addOU(branch_name)
         self.cd('ou={}'.format(branch_name))
-        self.addUser('ldap', 'LDAP Access User', 'secret')
+        self.addUser(self.config['branch_admin_cn'], 'LDAP Access User', self.config['branch_admin_password'])
         self.addUser('restricted', 'Restricted User', admin_password_for_branch(branch_name))
         self.addGroup('Managers')
         self.addOU('groups')
