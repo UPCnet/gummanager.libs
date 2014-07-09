@@ -21,9 +21,10 @@ class LdapServer(object):
 
     def connect(self, auth=True):
         self.ld = ldap.initialize(self.ldap_uri)
-        self.cd('/')
         if auth:
-            self.authenticate(self.admin_cn, self.admin_password)
+            return self.authenticate(self.admin_cn, self.admin_password)
+
+        return True
 
     def authenticate(self, username, password, branch=None, userdn=False):
         self.cd('/')
