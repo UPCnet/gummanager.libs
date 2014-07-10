@@ -321,6 +321,19 @@ class OauthServer(object):
 
         ###########################################################################################
 
+        progress_log('Commiting to local branch')
+
+        success = self.buildout.commit_to_local_branch(self.local_git_branch)
+        if success:
+            padded_success("Succesfully commited local changes")
+        else:
+            padded_error("Error on commiting")
+            return None
+
+        ###########################################################################################
+
+        progress_log('Changing folder permissions')
+
         success = self.buildout.change_permissions(self.process_uid)
         if success:
             padded_success("Succesfully changed permissions")

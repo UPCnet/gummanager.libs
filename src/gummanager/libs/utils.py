@@ -95,12 +95,14 @@ def padded_error(string):
 
 def padded_log(string, filters=[]):
     string = string.rstrip()
-    matched_filter = re.search(r'({})'.format('|'.join(filters)), string)
-    do_print = matched_filter or filters == []
-    # we have a multiline
-    line = re.sub(r'([\n\r])', r'\1    ', string)
-    if do_print:
-        print '    ' + line.rstrip()
+    # apply padding to rewrite lines (starting with \r)
+    string = re.sub(r'([\r])', r'\1    ', string)
+    lines = string.split('\n')
+    for line in lines:
+        matched_filter = re.search(r'({})'.format('|'.join(filters)), line)
+        do_print = matched_filter or filters == []
+        if do_print:
+            print '    ' + line.rstrip()
 
 
 def progress_log(string):
