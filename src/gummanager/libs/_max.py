@@ -445,20 +445,20 @@ class MaxServer(object):
         success = self.set_mongodb_indexes(instance_name)
         if success:
             padded_success("Succesfully added indexes")
-            return None
         else:
             padded_error("Error on adding indexes")
-
-        progress_log('Configuring default permissions settings')
+            return None
 
         ###########################################################################################
+
+        progress_log('Configuring default permissions settings')
 
         success = self.configure_max_security_settings(instance_name)
         if success:
             padded_success("Succesfully changed permissions settings")
-            return None
         else:
             padded_error("Error on setting permissions settings")
+            return None
 
         ###########################################################################################
 
@@ -478,6 +478,7 @@ class MaxServer(object):
         success = self.buildout.change_permissions(self.process_uid)
         if success:
             padded_success("Succesfully changed permissions")
-            return None
+
         else:
             padded_error("Error on changing permissions")
+            return None
