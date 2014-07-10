@@ -89,9 +89,9 @@ class LdapServer(object):
 
         ldif = modlist.addModlist({
             'objectclass': ['top', 'organizationalPerson', 'person', 'inetOrgPerson'],
-            'cn': user_name,
-            'sn': display_name,
-            'userPassword': self.ssha(password)
+            'cn': user_name.encode('utf-8'),
+            'sn': display_name.encode('utf-8'),
+            'userPassword': self.ssha(password.encode('utf-8'))
         })
 
         resp = self.ld.add_s(dn, ldif)
@@ -118,11 +118,17 @@ class LdapServer(object):
         self.cd('/')
         self.addOU(branch_name)
         self.cd('ou={}'.format(branch_name))
-        self.addUser(self.config['branch_admin_cn'], 'LDAP Access User', self.config['branch_admin_password'])
+        self.addUser(self.branch_admin_cn, 'LDAP Access User', self.branch_admin_password)
         self.addUser('restricted', 'Restricted User', admin_password_for_branch(branch_name))
+
         self.addGroup('Managers')
         self.addOU('groups')
         self.addOU('users')
+
+        # Add plain users
+        self.cd('ou=users,ou={}'.format(branch_name))
+        for user in self.base_users:
+            self.addUser(user['username'], user['username'], user['password'])
 
     def get_branch_users(self, branch_name, filter=None):
         self.cd('/')
