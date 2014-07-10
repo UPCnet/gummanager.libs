@@ -449,6 +449,28 @@ class MaxServer(object):
         else:
             padded_error("Error on adding indexes")
 
+        progress_log('Configuring default permissions settings')
+
+        ###########################################################################################
+
+        success = self.configure_max_security_settings(instance_name)
+        if success:
+            padded_success("Succesfully changed permissions settings")
+            return None
+        else:
+            padded_error("Error on setting permissions settings")
+
+        ###########################################################################################
+
+        progress_log('Commiting to local branch')
+
+        success = self.buildout.commit_to_local_branch(self.local_git_branch)
+        if success:
+            padded_success("Succesfully commited local changes")
+        else:
+            padded_error("Error on commiting")
+            return None
+
         ###########################################################################################
 
         progress_log('Changing permissions')
@@ -459,14 +481,3 @@ class MaxServer(object):
             return None
         else:
             padded_error("Error on changing permissions")
-
-        ###########################################################################################
-
-        progress_log('Configuring default permissions settings')
-
-        success = self.configure_max_security_settings(instance_name)
-        if success:
-            padded_success("Succesfully changed permissions settings")
-            return None
-        else:
-            padded_error("Error on setting permissions settings")
