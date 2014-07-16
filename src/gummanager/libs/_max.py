@@ -65,6 +65,9 @@ class MaxServer(object):
             )
             self.buildout.folder = new_instance_folder
 
+            # Force read the new configuration files
+            self.buildout.reload()
+
             maxini = self.buildout.config_files[instance_name]['max.ini']
             maxconfig = parse_ini_from(maxini)
             users = self.authorized_users
@@ -240,7 +243,6 @@ class MaxServer(object):
         else:
             padded_error('Websocket test failed, Timed out')
 
-
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
         max_status = circus_status(
@@ -311,149 +313,149 @@ class MaxServer(object):
 
         self.buildout.folder = new_instance_folder
 
-        # if self.remote.file_exists('{}'.format(new_instance_folder)):
-        #     padded_error('Folder {} already exists'.format(new_instance_folder))
-        #     return None
+        if self.remote.file_exists('{}'.format(new_instance_folder)):
+            padded_error('Folder {} already exists'.format(new_instance_folder))
+            return None
 
-        # ###########################################################################################
-        # progress_log('Cloning buildout')
+        ###########################################################################################
+        progress_log('Cloning buildout')
 
-        # success = self.buildout.clone(repo_url)
+        success = self.buildout.clone(repo_url)
 
-        # if success:
-        #     padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
-        # else:
-        #     padded_error('Error when cloning repo')
-        #     return None
+        if success:
+            padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
+        else:
+            padded_error('Error when cloning repo')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Bootstraping buildout')
+        progress_log('Bootstraping buildout')
 
-        # success = self.buildout.bootstrap('max-only.cfg')
+        success = self.buildout.bootstrap('max-only.cfg')
 
-        # if success:
-        #     padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
-        # else:
-        #     padded_error('Error on bootstraping')
-        #     return None
+        if success:
+            padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
+        else:
+            padded_error('Error on bootstraping')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Configuring customizeme.cfg')
+        progress_log('Configuring customizeme.cfg')
 
-        # customizations = {
-        #     'hosts': {
-        #         'main': self.server_dns,
-        #         'rabbitmq': self.rabbitmq_server,
-        #         'mongodb_cluster': self.mongodb_cluster
-        #     },
-        #     'max-config': {
-        #         'name': instance_name,
-        #     },
-        #     'ports': {
-        #         'port_index': '{:0>2}'.format(port_index),
-        #     },
-        #     'urls': {
-        #         'oauth': 'https://{}/{}'.format(self.default_oauth_server_dns, oauth_instance)
-        #     }
+        customizations = {
+            'hosts': {
+                'main': self.server_dns,
+                'rabbitmq': self.rabbitmq_server,
+                'mongodb_cluster': self.mongodb_cluster
+            },
+            'max-config': {
+                'name': instance_name,
+            },
+            'ports': {
+                'port_index': '{:0>2}'.format(port_index),
+            },
+            'urls': {
+                'oauth': 'https://{}/{}'.format(self.default_oauth_server_dns, oauth_instance)
+            }
 
-        # }
+        }
 
-        # success = self.buildout.configure_file('customizeme.cfg', customizations)
+        success = self.buildout.configure_file('customizeme.cfg', customizations)
 
-        # if success:
-        #     padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
-        # else:
-        #     padded_error('Error on applying settings on customizeme.cfg')
-        #     return None
+        if success:
+            padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
+        else:
+            padded_error('Error on applying settings on customizeme.cfg')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Creating nginx entry for max')
-        # nginx_params = {
-        #     'instance_name': instance_name,
-        #     'server_dns': self.server_dns,
-        #     'bigmax_port': BIGMAX_BASE_PORT,
-        #     'max_port': int(port_index) + MAX_BASE_PORT
-        # }
-        # nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
+        progress_log('Creating nginx entry for max')
+        nginx_params = {
+            'instance_name': instance_name,
+            'server_dns': self.server_dns,
+            'bigmax_port': BIGMAX_BASE_PORT,
+            'max_port': int(port_index) + MAX_BASE_PORT
+        }
+        nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
-        # success = self.remote.put_file("{}/config/max-instances/{}.conf".format(self.nginx_root, instance_name), nginxentry)
+        success = self.remote.put_file("{}/config/max-instances/{}.conf".format(self.nginx_root, instance_name), nginxentry)
 
-        # if success:
-        #     padded_success("Succesfully created {}/config/max-instances/{}.conf".format(self.nginx_root, instance_name))
-        # else:
-        #     padded_error('Error when generating nginx config file for max')
-        #     return None
+        if success:
+            padded_success("Succesfully created {}/config/max-instances/{}.conf".format(self.nginx_root, instance_name))
+        else:
+            padded_error('Error when generating nginx config file for max')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Creating nginx entry for circus')
-        # circus_nginx_params = {
-        #     'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
-        #     'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
-        # }
-        # circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
+        progress_log('Creating nginx entry for circus')
+        circus_nginx_params = {
+            'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
+            'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
+        }
+        circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
 
-        # success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
+        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
 
-        # if success:
-        #     padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
-        # else:
-        #     padded_error('Error when generating nginx config file for circus')
-        #     return None
+        if success:
+            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
+        else:
+            padded_error('Error when generating nginx config file for circus')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Generating init.d script')
-        # initd_params = {
-        #     'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
-        #     'instance_folder': new_instance_folder
-        # }
-        # initd_script = INIT_D_SCRIPT.format(**initd_params)
-        # success = self.remote.put_file("/etc/init.d/max_{}".format(instance_name), initd_script)
+        progress_log('Generating init.d script')
+        initd_params = {
+            'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
+            'instance_folder': new_instance_folder
+        }
+        initd_script = INIT_D_SCRIPT.format(**initd_params)
+        success = self.remote.put_file("/etc/init.d/max_{}".format(instance_name), initd_script)
 
-        # code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(instance_name))
-        # if code != 0:
-        #     success = False
+        code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(instance_name))
+        if code != 0:
+            success = False
 
-        # code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(instance_name))
-        # if code != 0:
-        #     success = False
+        code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(instance_name))
+        if code != 0:
+            success = False
 
-        # if success:
-        #     padded_success("Succesfully created /etc/init.d/max_{}".format(instance_name))
-        # else:
-        #     padded_error('Error when generating init.d script')
-        #     return None
+        if success:
+            padded_success("Succesfully created /etc/init.d/max_{}".format(instance_name))
+        else:
+            padded_error('Error when generating init.d script')
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Executing buildout')
+        progress_log('Executing buildout')
 
-        # success = self.buildout.execute()
-        # if success:
-        #     padded_success("Succesfully created a new max instance")
-        # else:
-        #     padded_error("Error on buildout execution")
-        #     return None
+        success = self.buildout.execute()
+        if success:
+            padded_success("Succesfully created a new max instance")
+        else:
+            padded_error("Error on buildout execution")
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
-        # progress_log('Adding indexes to mongodb')
+        progress_log('Adding indexes to mongodb')
 
-        # success = self.set_mongodb_indexes(instance_name)
-        # if success:
-        #     padded_success("Succesfully added indexes")
-        # else:
-        #     padded_error("Error on adding indexes")
-        #     return None
+        success = self.set_mongodb_indexes(instance_name)
+        if success:
+            padded_success("Succesfully added indexes")
+        else:
+            padded_error("Error on adding indexes")
+            return None
 
-        # ###########################################################################################
+        ###########################################################################################
 
         progress_log('Configuring default permissions settings')
-        import ipdb;ipdb.set_trace()
+
         success = self.configure_max_security_settings(instance_name)
         if success:
             padded_success("Succesfully changed permissions settings")

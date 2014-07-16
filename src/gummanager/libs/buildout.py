@@ -117,6 +117,9 @@ class RemoteBuildoutHelper(object):
         code, stdout = self.remote.execute('cd {0} && chown -R {1}:{1} .'.format(self.folder, uid))
         return code == 0
 
+    def reload(self):
+        self._remote_config_files = {}
+
     @property
     def config_files(self):
         if not self._remote_config_files:
