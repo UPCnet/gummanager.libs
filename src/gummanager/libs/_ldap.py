@@ -12,17 +12,17 @@ LDAP_INVALID_CREDENTIALS = 0x101
 
 
 class LdapServer(object):
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, config, *args, **kwargs):
 
-        self.ldap_uri = '{server}:{port}'.format(**kwargs)
+        self.config = config
+
+        self.ldap_uri = '{server}:{port}'.format(**self.config)
         self.leaf_dn = ''
 
     def connect(self, auth=True):
         self.ld = ldap.initialize(self.ldap_uri)
         if auth:
-            return self.authenticate(self.admin_cn, self.admin_password)
+            return self.authenticate(self.config.admin_cn, self.config.admin_password)
 
         return True
 
@@ -64,9 +64,9 @@ class LdapServer(object):
 
     @property
     def dn(self):
-        base_dn = self.base_dn
+        base_dn = self.config.base_dn
         if self.leaf_dn:
-            base_dn = '{},{}'.format(self.leaf_dn, self.base_dn)
+            base_dn = '{},{}'.format(self.leaf_dn, self.config.base_dn)
         return base_dn
 
     def addOU(self, ou_name):
@@ -118,7 +118,7 @@ class LdapServer(object):
         self.cd('/')
         self.addOU(branch_name)
         self.cd('ou={}'.format(branch_name))
-        self.addUser(self.branch_admin_cn, 'LDAP Access User', self.branch_admin_password)
+        self.addUser(self.config.branch_admin_cn, 'LDAP Access User', self.config.branch_admin_password)
         self.addUser('restricted', 'Restricted User', admin_password_for_branch(branch_name))
 
         self.addGroup('Managers')
@@ -127,8 +127,8 @@ class LdapServer(object):
 
         # Add plain users
         self.cd('ou=users,ou={}'.format(branch_name))
-        for user in self.base_users:
-            self.addUser(user['username'], user['username'], user['password'])
+        for user in self.config.base_users:
+            self.addUser(user.username, user.username, user.password)
 
     def get_branch_users(self, branch_name, filter=None):
         self.cd('/')
@@ -194,7 +194,7 @@ class LdapServer(object):
     def get_branches(self):
         try:
             ldap_result_id = self.ld.search(
-                self.base_dn,
+                self.config.base_dn,
                 ldap.SCOPE_ONELEVEL,
                 "ou=*",
                 None
