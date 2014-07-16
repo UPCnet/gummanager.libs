@@ -28,9 +28,8 @@ from gummanager.libs.utils import ReadyCounter
 
 class UTalkServer(object):
 
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
 
     def getDomainInfo(self, domain):
         max_info = self.maxserver.get_instance(domain)

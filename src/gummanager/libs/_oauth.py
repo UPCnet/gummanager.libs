@@ -21,9 +21,8 @@ import re
 
 class OauthServer(object):
 
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
 
         self.remote = RemoteConnection(self.ssh_user, self.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)

@@ -26,9 +26,8 @@ from gevent.event import AsyncResult
 
 class MaxServer(object):
 
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
 
         self._client = None
         self._instances = {}

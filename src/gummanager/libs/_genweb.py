@@ -121,9 +121,8 @@ class Plone(object):
 class GenwebServer(object):
     _remote_config_files = {}
 
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
 
     def get_environment(self, server):
         return [a for a in self.environments if a['server'] == server][0]
