@@ -1,5 +1,4 @@
-from setuptools import setup, find_packages
-import os
+from setuptools import setup
 
 version = '1.3.dev0'
 
@@ -21,15 +20,14 @@ setup(name='gummanager.libs',
       # Get more strings from
       # http://pypi.python.org/pypi?%3Aaction=list_classifiers
       classifiers=[
-        "Programming Language :: Python",
-        ],
+          "Programming Language :: Python",
+      ],
       keywords='',
       author='Carles Bruguera',
       author_email='carles.bruguera@upcnet.es',
       url='http://svn.plone.org/svn/collective/',
       license='gpl',
-      packages=find_packages('src'),
-      package_dir = {'': 'src'},
+      packages=['gummanager'],
       namespace_packages=['gummanager'],
       include_package_data=True,
       zip_safe=False,
