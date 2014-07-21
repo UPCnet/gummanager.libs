@@ -9,10 +9,10 @@ class RemoteBuildoutHelper(object):
     folder = ''
     cfgfile = ''
 
-    def __init__(self, remoteConnection, python_interpreter, config):
+    def __init__(self, remoteConnection, python_interpreter, server):
         self.remote = remoteConnection
         self.python_interpreter = python_interpreter
-        self.config = config
+        self.config = server.config
         self._remote_config_files = {}
 
     def commit_to_local_branch(self, git_branch_name):

@@ -31,8 +31,8 @@ class MaxServer(object):
 
         self._client = None
         self._instances = {}
-        self.remote = RemoteConnection(self.ssh_user, self.server)
-        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
+        self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
+        self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
     def get_client(self, instance_name, username, password):
         instance_info = self.get_instance(instance_name)
@@ -50,7 +50,7 @@ class MaxServer(object):
 
     def set_mongodb_indexes(self, instance_name):
         new_instance_folder = '{}/{}'.format(
-            self.instances_root,
+            self.config.instances_root,
             instance_name
         )
         code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
@@ -59,7 +59,7 @@ class MaxServer(object):
     def configure_max_security_settings(self, instance_name):
         try:
             new_instance_folder = '{}/{}'.format(
-                self.instances_root,
+                self.config.instances_root,
                 instance_name
             )
             self.buildout.folder = new_instance_folder
@@ -279,12 +279,12 @@ class MaxServer(object):
             instance['port_index'] = port_index
             instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
             instance['server'] = {
-                'direct': 'http://{}:{}'.format(self.server, maxconfig['server:main']['port']),
+                'direct': 'http://{}:{}'.format(self.config.server, maxconfig['server:main']['port']),
                 'dns': maxconfig['app:main']['max.server']
             }
             instance['oauth'] = maxconfig['app:main']['max.oauth_server']
-            instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
+            instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
+            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
 
             self._instances[instance_name] = instance
         return self._instances[instance_name]
@@ -306,7 +306,7 @@ class MaxServer(object):
         oauth_instance = oauth_instance if oauth_instance is not None else instance_name
         repo_url = 'https://github.com/UPCnet/maxserver'
         new_instance_folder = '{}/{}'.format(
-            self.instances_root,
+            self.config.instances_root,
             instance_name
         )
 
