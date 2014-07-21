@@ -47,7 +47,8 @@ setup(name='gummanager.libs',
           'maxclient',
           'websocket-client',
           'stomp.py',
-          'maxcarrot'
+          'maxcarrot',
+          'gevent'
       ],
       entry_points="""
       # -*- Entry points: -*-
