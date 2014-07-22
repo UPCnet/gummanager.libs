@@ -1,27 +1,33 @@
+from maxclient.rest import MaxClient
+
 from collections import OrderedDict
+from gevent.event import AsyncResult
 from gummanager.libs.buildout import RemoteBuildoutHelper
+from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
-from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 from gummanager.libs.ports import BIGMAX_BASE_PORT
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
-from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import CIRCUS_NGINX_BASE_PORT
+from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
-from gummanager.libs.utils import padded_error, padded_log
-from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import RemoteConnection
-from gummanager.libs.utils import circus_status, circus_control
+from gummanager.libs.utils import admin_password_for_branch
+from gummanager.libs.utils import circus_control
+from gummanager.libs.utils import circus_status
+from gummanager.libs.utils import error_log
+from gummanager.libs.utils import padded_error
+from gummanager.libs.utils import padded_log
+from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
-from gummanager.libs.utils import admin_password_for_branch
-
-
-from maxclient.rest import MaxClient
+from gummanager.libs.utils import step_log
+from gummanager.libs.utils import success_log
 from time import sleep
-import pymongo
+
+from collections import namedtuple
 import gevent
-from gevent.event import AsyncResult
+import pymongo
 
 
 class MaxServer(object):
@@ -31,6 +37,7 @@ class MaxServer(object):
 
         self._client = None
         self._instances = {}
+        self.instance = None
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
@@ -40,6 +47,47 @@ class MaxServer(object):
         client.login(username=username, password=password)
         return client
 
+    def get_instance(self, instance_name):
+        if instance_name not in self._instances:
+            max_ini = self.buildout.config_files.get(instance_name, {}).get('max.ini', '')
+            if not max_ini:
+                return {}
+
+            maxconfig = parse_ini_from(max_ini)
+            port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
+
+            instance = OrderedDict()
+            instance['name'] = instance_name
+            instance['port_index'] = port_index
+            instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
+            instance['server'] = {
+                'direct': 'http://{}:{}'.format(self.config.server, maxconfig['server:main']['port']),
+                'dns': maxconfig['app:main']['max.server']
+            }
+            instance['oauth'] = maxconfig['app:main']['max.oauth_server']
+            instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
+            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
+
+            self._instances[instance_name] = instance
+        return self._instances[instance_name]
+
+    def set_instance(self, **kwargs):
+        InstanceData = namedtuple('InstanceData', kwargs.keys())
+        self.instance = InstanceData(**kwargs)
+
+    def instance_by_port_index(self, port_index):
+        instances = self.get_instances()
+        for instance in instances:
+            if instance['port_index'] == port_index:
+                return instance
+        return None
+
+    def get_available_port(self):
+        instances = self.get_instances()
+        ports = [instance['port_index'] for instance in instances]
+        ports.sort()
+        return ports[-1] + 1 if ports else 1
+
     def get_instances(self):
         instances = []
         for instance_name in self.buildout.config_files:
@@ -47,42 +95,6 @@ class MaxServer(object):
             if instance:
                 instances.append(instance)
         return instances
-
-    def set_mongodb_indexes(self, instance_name):
-        new_instance_folder = '{}/{}'.format(
-            self.config.instances_root,
-            instance_name
-        )
-        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
-        return 'Added' in stdout
-
-    def configure_max_security_settings(self, instance_name):
-        try:
-            new_instance_folder = '{}/{}'.format(
-                self.config.instances_root,
-                instance_name
-            )
-            self.buildout.folder = new_instance_folder
-
-            # Force read the new configuration files
-            self.buildout.reload()
-
-            maxini = self.buildout.config_files[instance_name]['max.ini']
-            maxconfig = parse_ini_from(maxini)
-            users = self.authorized_users
-            default_security = {'roles': {"Manager": users}}
-            hosts = self.mongodb_cluster
-            replica_set = maxconfig['app:main']['mongodb.replica_set']
-            conn = pymongo.MongoReplicaSetClient(hosts, replicaSet=replica_set)
-
-            db_name = maxconfig['app:main']['mongodb.db_name']
-            db = conn[db_name]
-
-            if not [items for items in db.security.find({})]:
-                db.security.insert(default_security)
-        except:
-            return None
-        return True
 
     def reload_nginx_configuration(self):
         progress_log('Reloading nginx configuration')
@@ -141,6 +153,29 @@ class MaxServer(object):
             padded_success('Osiris Max instance {} stopped'.format(instance_name))
         else:
             padded_error('Osiris Max instance {} still active'.format(instance_name))
+
+    def get_status(self, instance_name):
+        instance = self.get_instance(instance_name)
+        max_status = circus_status(
+            endpoint=instance['circus_tcp'],
+            process='max'
+        )
+
+        result_status = OrderedDict()
+        result_status['name'] = instance_name
+        result_status['server'] = instance['server']
+        result_status['status'] = {
+            'max': max_status['status'],
+        }
+        result_status['pid'] = {
+            'max': max_status['pid'],
+        }
+
+        result_status['uptime'] = {
+            'max': max_status['uptime'],
+        }
+
+        return result_status
 
     def test_activity(self, instance_name, ldap_branch):
 
@@ -242,121 +277,44 @@ class MaxServer(object):
         else:
             padded_error('Websocket test failed, Timed out')
 
-    def get_status(self, instance_name):
-        instance = self.get_instance(instance_name)
-        max_status = circus_status(
-            endpoint=instance['circus_tcp'],
-            process='max'
-        )
+    # Steps
 
-        result_status = OrderedDict()
-        result_status['name'] = instance_name
-        result_status['server'] = instance['server']
-        result_status['status'] = {
-            'max': max_status['status'],
-        }
-        result_status['pid'] = {
-            'max': max_status['pid'],
-        }
-
-        result_status['uptime'] = {
-            'max': max_status['uptime'],
-        }
-
-        return result_status
-
-    def get_instance(self, instance_name):
-        if instance_name not in self._instances:
-            max_ini = self.buildout.config_files.get(instance_name, {}).get('max.ini', '')
-            if not max_ini:
-                return {}
-
-            maxconfig = parse_ini_from(max_ini)
-            port_index = int(maxconfig['server:main']['port']) - MAX_BASE_PORT
-
-            instance = OrderedDict()
-            instance['name'] = instance_name
-            instance['port_index'] = port_index
-            instance['mongo_database'] = maxconfig['app:main']['mongodb.db_name']
-            instance['server'] = {
-                'direct': 'http://{}:{}'.format(self.config.server, maxconfig['server:main']['port']),
-                'dns': maxconfig['app:main']['max.server']
-            }
-            instance['oauth'] = maxconfig['app:main']['max.oauth_server']
-            instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
-
-            self._instances[instance_name] = instance
-        return self._instances[instance_name]
-
-    def instance_by_port_index(self, port_index):
-        instances = self.get_instances()
-        for instance in instances:
-            if instance['port_index'] == port_index:
-                return instance
-        return None
-
-    def get_available_port(self):
-        instances = self.get_instances()
-        ports = [instance['port_index'] for instance in instances]
-        ports.sort()
-        return ports[-1] + 1 if ports else 1
-
-    def new_instance(self, instance_name, port_index, oauth_instance=None):
-        oauth_instance = oauth_instance if oauth_instance is not None else instance_name
+    def clone_buildout(self):
         repo_url = 'https://github.com/UPCnet/maxserver'
-        new_instance_folder = '{}/{}'.format(
-            self.config.instances_root,
-            instance_name
-        )
 
-        self.buildout.folder = new_instance_folder
-
-        if self.remote.file_exists('{}'.format(new_instance_folder)):
-            padded_error('Folder {} already exists'.format(new_instance_folder))
-            return None
-
-        ###########################################################################################
-        progress_log('Cloning buildout')
+        if self.remote.file_exists('{}'.format(self.buildout.folder)):
+            return error_log('Folder {} already exists'.format(self.buildout.folder))
 
         success = self.buildout.clone(repo_url)
 
         if success:
-            padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
+            return success_log('Succesfully cloned repo at {}'.format(self.buildout.folder))
         else:
-            padded_error('Error when cloning repo')
-            return None
+            return error_log('Error when cloning repo')
 
-        ###########################################################################################
-
-        progress_log('Bootstraping buildout')
-
+    def bootstrap_buildout(self):
         success = self.buildout.bootstrap('max-only.cfg')
-
         if success:
-            padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
+            return success_log('Succesfully bootstraped buildout {}'.format(self.buildout.folder))
         else:
-            padded_error('Error on bootstraping')
-            return None
+            return error_log('Error on bootstraping')
 
-        ###########################################################################################
-
-        progress_log('Configuring customizeme.cfg')
+    def configure_instance(self):
 
         customizations = {
             'hosts': {
-                'main': self.server_dns,
-                'rabbitmq': self.rabbitmq_server,
-                'mongodb_cluster': self.mongodb_cluster
+                'main': self.config.server_dns,
+                'rabbitmq': self.config.rabbitmq_server,
+                'mongodb_cluster': self.config.mongodb_cluster
             },
             'max-config': {
-                'name': instance_name,
+                'name': self.instance.name,
             },
             'ports': {
-                'port_index': '{:0>2}'.format(port_index),
+                'port_index': '{:0>2}'.format(self.instance.index),
             },
             'urls': {
-                'oauth': 'https://{}/{}'.format(self.default_oauth_server_dns, oauth_instance)
+                'oauth': 'https://{}/{}'.format(self.config.default_oauth_server_dns, self.instance.oauth)
             }
 
         }
@@ -364,123 +322,171 @@ class MaxServer(object):
         success = self.buildout.configure_file('customizeme.cfg', customizations)
 
         if success:
-            padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
+            return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
         else:
-            padded_error('Error on applying settings on customizeme.cfg')
-            return None
+            return error_log('Error on applying settings on customizeme.cfg')
 
-        ###########################################################################################
+    def create_max_nginx_entry(self):
 
-        progress_log('Creating nginx entry for max')
         nginx_params = {
-            'instance_name': instance_name,
-            'server_dns': self.server_dns,
+            'instance_name': self.instance.name,
+            'server_dns': self.config.server_dns,
             'bigmax_port': BIGMAX_BASE_PORT,
-            'max_port': int(port_index) + MAX_BASE_PORT
+            'max_port': int(self.instance.index) + MAX_BASE_PORT
         }
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
-        success = self.remote.put_file("{}/config/max-instances/{}.conf".format(self.nginx_root, instance_name), nginxentry)
+        nginx_file_location = "{}/config/max-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
+        success = self.remote.put_file(nginx_file_location, nginxentry)
 
         if success:
-            padded_success("Succesfully created {}/config/max-instances/{}.conf".format(self.nginx_root, instance_name))
+            return success_log("Succesfully created {}".format(nginx_file_location))
         else:
-            padded_error('Error when generating nginx config file for max')
-            return None
+            return error_log('Error when generating nginx config file for max')
 
-        ###########################################################################################
+    def create_circus_nginx_entry(self):
 
-        progress_log('Creating nginx entry for circus')
         circus_nginx_params = {
-            'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
+            'circus_nginx_port': int(self.instance.index) + CIRCUS_NGINX_BASE_PORT,
+            'circus_httpd_endpoint': int(self.instance.index) + CIRCUS_HTTPD_BASE_PORT
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
-
-        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
+        nginx_file_location = "{}/config/circus-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
+        success = self.remote.put_file(nginx_file_location, circus_nginxentry)
 
         if success:
-            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
+            return success_log("Succesfully created {}".format(nginx_file_location))
         else:
-            padded_error('Error when generating nginx config file for circus')
-            return None
+            return error_log('Error when generating nginx config file for max')
 
-        ###########################################################################################
-
-        progress_log('Generating init.d script')
+    def generate_startup_script(self):
         initd_params = {
-            'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
-            'instance_folder': new_instance_folder
+            'port_index': int(self.instance.index) + CIRCUS_TCP_BASE_PORT,
+            'instance_folder': self.buildout.folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
-        success = self.remote.put_file("/etc/init.d/max_{}".format(instance_name), initd_script)
+        success = self.remote.put_file("/etc/init.d/max_{}".format(self.instance.name), initd_script)
 
-        code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(instance_name))
+        code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(self.instance.name))
         if code != 0:
             success = False
 
-        code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(instance_name))
+        code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(self.instance.name))
         if code != 0:
             success = False
 
         if success:
-            padded_success("Succesfully created /etc/init.d/max_{}".format(instance_name))
+            return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
         else:
-            padded_error('Error when generating init.d script')
-            return None
+            return error_log('Error when generating init.d script')
 
-        ###########################################################################################
-
-        progress_log('Executing buildout')
-
+    def execute_buildout(self):
         success = self.buildout.execute()
         if success:
-            padded_success("Succesfully created a new max instance")
+            return success_log("Succesfully created a new max instance")
         else:
-            padded_error("Error on buildout execution")
-            return None
+            return error_log("Error on buildout execution")
 
-        ###########################################################################################
+    def set_mongodb_indexes(self):
+        new_instance_folder = '{}/{}'.format(
+            self.config.instances_root,
+            self.instance.name
+        )
+        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
+        success = 'Added' in stdout
 
-        progress_log('Adding indexes to mongodb')
-
-        success = self.set_mongodb_indexes(instance_name)
         if success:
-            padded_success("Succesfully added indexes")
+            return success_log("Succesfully added indexes")
         else:
-            padded_error("Error on adding indexes")
-            return None
+            return error_log("Error on adding indexes")
 
-        ###########################################################################################
+    def configure_max_security_settings(self):
+        try:
+            new_instance_folder = '{}/{}'.format(
+                self.config.instances_root,
+                self.instance.name
+            )
+            self.buildout.folder = new_instance_folder
 
-        progress_log('Configuring default permissions settings')
+            # Force read the new configuration files
+            self.buildout.reload()
 
-        success = self.configure_max_security_settings(instance_name)
+            maxini = self.buildout.config_files[self.instance.name]['max.ini']
+            maxconfig = parse_ini_from(maxini)
+            users = self.config.authorized_users
+            default_security = {'roles': {"Manager": users}}
+            hosts = self.config.mongodb_cluster
+            replica_set = maxconfig['app:main']['mongodb.replica_set']
+            conn = pymongo.MongoReplicaSetClient(hosts, replicaSet=replica_set)
+
+            db_name = maxconfig['app:main']['mongodb.db_name']
+            db = conn[db_name]
+
+            if not [items for items in db.security.find({})]:
+                db.security.insert(default_security)
+        except:
+            return error_log("Error on setting permissions settings")
+        return success_log("Succesfully changed permissions settings")
+
+    def commit_local_changes(self):
+        success = self.buildout.commit_to_local_branch(self.config.local_git_branch)
+
         if success:
-            padded_success("Succesfully changed permissions settings")
+            return success_log("Succesfully commited local changes")
         else:
-            padded_error("Error on setting permissions settings")
-            return None
+            return error_log("Error on commiting")
 
-        ###########################################################################################
-
-        progress_log('Commiting to local branch')
-
-        success = self.buildout.commit_to_local_branch(self.local_git_branch)
+    def set_filesystem_permissions(self):
+        success = self.buildout.change_permissions(self.config.process_uid)
         if success:
-            padded_success("Succesfully commited local changes")
+            return success_log("Succesfully changed permissions")
         else:
-            padded_error("Error on commiting")
-            return None
+            return error_log("Error on changing permissions")
 
-        ###########################################################################################
+    # Recipes
 
-        progress_log('Changing permissions')
+    def new_instance(self, instance_name, port_index, oauth_instance=None):
 
-        success = self.buildout.change_permissions(self.process_uid)
-        if success:
-            padded_success("Succesfully changed permissions")
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
 
-        else:
-            padded_error("Error on changing permissions")
-            return None
+        self.set_instance(
+            name=instance_name,
+            index=port_index,
+            oauth=oauth_instance if oauth_instance is not None else instance_name,
+        )
+
+        yield step_log('Cloning buildout')
+        yield self.clone_buildout()
+
+        yield step_log('Bootstraping buildout')
+        yield self.bootstrap_buildout()
+
+        yield step_log('Configuring customizeme.cfg')
+        yield self.configure_instance()
+
+        yield step_log('Creating nginx entry for max')
+        yield self.create_max_nginx_entry()
+
+        yield step_log('Creating nginx entry for circus')
+        yield self.create_circus_nginx_entry()
+
+        yield step_log('Generating init.d script')
+        yield self.generate_startup_script()
+
+        yield step_log('Executing buildout')
+        yield self.execute_buildout()
+
+        yield step_log('Adding indexes to mongodb')
+        yield self.set_mongodb_indexes()
+
+        yield step_log('Configuring default permissions settings')
+        yield self.configure_max_security_settings()
+
+        yield step_log('Commiting to local branch')
+        yield self.commit_local_changes()
+
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()

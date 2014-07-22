@@ -24,8 +24,8 @@ class OauthServer(object):
     def __init__(self, config, *args, **kwargs):
         self.config = config
 
-        self.remote = RemoteConnection(self.ssh_user, self.server)
-        self.buildout = RemoteBuildoutHelper(self.remote, self.python_interpreter, self)
+        self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
+        self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
     def get_instances(self):
         instances = []
@@ -126,16 +126,16 @@ class OauthServer(object):
         instance['port_index'] = port_index
         instance['mongo_database'] = osiris['app:main']['osiris.store.db']
         instance['server'] = {
-            'direct': 'http://{}:{}'.format(self.server, osiris['server:main']['port']),
-            'dns': 'https://{}/{}'.format(self.server_dns, instance_name)
+            'direct': 'http://{}:{}'.format(self.config.server, osiris['server:main']['port']),
+            'dns': 'https://{}/{}'.format(self.config.server_dns, instance_name)
         }
         instance['ldap'] = {
             'server': ldap['ldap']['server'],
             'basedn': ldap['ldap']['userbasedn'],
             'branch': re.match(r"ou=(.*?),", ldap['ldap']['userbasedn']).groups()[0]
         }
-        instance['circus'] = 'http://{}:{}'.format(self.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-        instance['circus_tcp'] = 'tcp://{}:{}'.format(self.server, CIRCUS_TCP_BASE_PORT + port_index)
+        instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
+        instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
 
         return instance
 
@@ -164,7 +164,7 @@ class OauthServer(object):
         ldap_name = ldap_branch if ldap_branch is not None else instance_name
         repo_url = 'https://github.com/UPCnet/maxserver'
         new_instance_folder = '{}/{}'.format(
-            self.instances_root,
+            self.config.instances_root,
             instance_name
         )
 
@@ -203,9 +203,9 @@ class OauthServer(object):
 
         customizations = {
             'hosts': {
-                'main': self.server_dns,
-                'rabbitmq': self.rabbitmq_server,
-                'mongodb_cluster': self.mongodb_cluster
+                'main': self.config.server_dns,
+                'rabbitmq': self.config.rabbitmq_server,
+                'mongodb_cluster': self.config.mongodb_cluster
             },
             'max-config': {
                 'name': instance_name,
@@ -231,7 +231,7 @@ class OauthServer(object):
             string=LDAP_INI,
             params={
                 'ldap': {
-                    'server': self.ldap_config['server'],
+                    'server': self.config.ldap_config['server'],
                     'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(ldap_name),
                     'userbasedn': 'ou={},dc=upcnet,dc=es'.format(ldap_name),
                     'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(ldap_name)
@@ -252,15 +252,15 @@ class OauthServer(object):
         progress_log('Creating nginx entry')
         nginx_params = {
             'instance_name': instance_name,
-            'server_dns': self.server_dns,
+            'server_dns': self.config.server_dns,
             'osiris_port': int(port_index) + OSIRIS_BASE_PORT
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        success = self.remote.put_file("{}/config/osiris-instances/{}.conf".format(self.nginx_root, instance_name), nginxentry)
+        success = self.remote.put_file("{}/config/osiris-instances/{}.conf".format(self.config.nginx_root, instance_name), nginxentry)
 
         if success:
-            padded_success("Succesfully created {}/config/osiris-instances/{}.conf".format(self.nginx_root, instance_name))
+            padded_success("Succesfully created {}/config/osiris-instances/{}.conf".format(self.config.nginx_root, instance_name))
         else:
             padded_error('Error when generating nginx config file')
             return None
@@ -274,10 +274,10 @@ class OauthServer(object):
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
 
-        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name), circus_nginxentry)
+        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.config.nginx_root, instance_name), circus_nginxentry)
 
         if success:
-            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.nginx_root, instance_name))
+            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.config.nginx_root, instance_name))
         else:
             padded_error('Error when generating nginx config file for circus')
             return None
@@ -322,7 +322,7 @@ class OauthServer(object):
 
         progress_log('Commiting to local branch')
 
-        success = self.buildout.commit_to_local_branch(self.local_git_branch)
+        success = self.buildout.commit_to_local_branch(self.config.local_git_branch)
         if success:
             padded_success("Succesfully commited local changes")
         else:
@@ -333,7 +333,7 @@ class OauthServer(object):
 
         progress_log('Changing folder permissions')
 
-        success = self.buildout.change_permissions(self.process_uid)
+        success = self.buildout.change_permissions(self.config.process_uid)
         if success:
             padded_success("Succesfully changed permissions")
             return None

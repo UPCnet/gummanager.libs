@@ -73,7 +73,7 @@ class ULearnServer(GenwebServer):
 
     def __init__(self, *args, **kwargs):
         super(ULearnServer, self).__init__(*args, **kwargs)
-        self.prefes = RemoteConnection(self.prefe_ssh_user, self.prefe_server)
+        self.prefes = RemoteConnection(self.config.prefe_ssh_user, self.config.prefe_server)
 
     def reload_nginx_configuration(self):
         progress_log('Reloading nginx configuration')
@@ -101,10 +101,10 @@ class ULearnServer(GenwebServer):
         }
         nginxentry = ULEARN_NGINX_ENTRY.format(**nginx_params)
 
-        success = self.prefes.put_file("{}/config/ulearn-instances/{}.conf".format(self.prefe_nginx_root, site.plonesite), nginxentry)
+        success = self.prefes.put_file("{}/config/ulearn-instances/{}.conf".format(self.config.prefe_nginx_root, site.plonesite), nginxentry)
 
         if success:
-            return success_log("Succesfully created {}/config/ulearn-instances/{}.conf".format(self.prefe_nginx_root, site.plonesite))
+            return success_log("Succesfully created {}/config/ulearn-instances/{}.conf".format(self.config.prefe_nginx_root, site.plonesite))
         else:
             return error_log('Error when generating nginx config file for ulean')
 
@@ -134,5 +134,5 @@ class ULearnServer(GenwebServer):
         yield step_log('Rebuilding catalog')
         yield site.rebuild_catalog()
 
-        yield step_log('Setting up nginx entry @ {}'.format(self.prefe_server))
+        yield step_log('Setting up nginx entry @ {}'.format(self.config.prefe_server))
         yield self.setup_nginx(site, max_direct_url)

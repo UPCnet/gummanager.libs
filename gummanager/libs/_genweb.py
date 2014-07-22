@@ -125,7 +125,7 @@ class GenwebServer(object):
         self.config = config
 
     def get_environment(self, server):
-        return [a for a in self.environments if a['server'] == server][0]
+        return [a for a in self.config.environments if a['server'] == server][0]
 
     def is_mountpoint_available(self, environment, mountpoint_id, allow_shared=False):
         mountpoints = self.get_mountpoints()
@@ -156,7 +156,7 @@ class GenwebServer(object):
     def get_mountpoints(self):
         mountpoints = {}
 
-        for environment in self.environments:
+        for environment in self.config.environments:
             auth = (environment['admin_username'], environment['admin_password'])
             port = GENWEB_ZOPE_CLIENT_BASE_PORT + 1
             resp = requests.get(
