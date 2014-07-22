@@ -4,6 +4,7 @@ from gummanager.libs._genweb import GenwebServer, Plone
 import requests
 import json
 from pyquery import PyQuery
+from collections import namedtuple
 
 
 class UlearnSite(Plone):
@@ -39,11 +40,11 @@ class UlearnSite(Plone):
         else:
             return None
 
-    def setup_max(self, max_name, oauth_name):
+    def setup_max(self, max_name, oauth_name, ldap_branch):
         """
         """
         username = 'restricted'
-        password = '{}secret'.format(max_name)
+        password = '{}secret'.format(ldap_branch)
         oauth_server = "https://oauth.upcnet.es/{}".format(oauth_name)
         user_token = self.get_token(oauth_server, username, password)
         if user_token is None:
@@ -113,26 +114,25 @@ class ULearnServer(GenwebServer):
         settings = site.get_settings()
         return settings
 
-    def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch):
+    def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch, logecho):
 
         environment = self.get_environment(environment)
-
-        site = UlearnSite(environment, mountpoint, instance_name, title, language)
+        site = UlearnSite(environment, mountpoint, instance_name, title, language, logecho)
 
         yield step_log('Creating Plone site')
         yield site.create(packages=['ulearn.core:default'])
 
-        yield step_log('Setting up homepage')
-        yield site.setup_homepage()
+        # yield step_log('Setting up homepage')
+        # yield site.setup_homepage()
 
-        yield step_log('Setting up ldap')
-        yield site.setup_ldap(branch=ldap_branch)
+        # yield step_log('Setting up ldap')
+        # yield site.setup_ldap(branch=ldap_branch)
 
-        yield step_log('Setting up max')
-        yield site.setup_max(max_name, oauth_name)
+        # yield step_log('Setting up max')
+        # yield site.setup_max(max_name, oauth_name, ldap_branch)
 
-        yield step_log('Rebuilding catalog')
-        yield site.rebuild_catalog()
+        # yield step_log('Rebuilding catalog')
+        # yield site.rebuild_catalog()
 
-        yield step_log('Setting up nginx entry @ {}'.format(self.config.prefe_server))
-        yield self.setup_nginx(site, max_direct_url)
+        # yield step_log('Setting up nginx entry @ {}'.format(self.config.prefe_server))
+        # yield self.setup_nginx(site, max_direct_url)

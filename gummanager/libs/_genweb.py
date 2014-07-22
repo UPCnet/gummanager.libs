@@ -10,7 +10,6 @@ from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
 from gummanager.libs.utils import padded_error, step_log, success_log, error_log
 
-import tarfile
 from StringIO import StringIO
 from collections import OrderedDict
 from pyquery import PyQuery
@@ -18,12 +17,13 @@ import requests
 
 
 class Plone(object):
-    def __init__(self, environment, mountpoint, plonesite, title, language):
+    def __init__(self, environment, mountpoint, plonesite, title, language, logecho=None):
         self.environment = environment
         self.mountpoint = mountpoint
         self.plonesite = plonesite
         self.title = title
         self.language = language
+        self.echo = logecho
 
     @property
     def auth(self):
@@ -63,9 +63,11 @@ class Plone(object):
             "form.submitted:boolean": True,
             "submit": "Crear lloc Plone"
         }
-        params
         create_plone_url = '{}/@@plone-addsite'.format(self.mountpoint_url)
+
+        self.echo.start()
         req = requests.post(create_plone_url, params, auth=self.auth)
+        self.echo.kill()
         if req.status_code not in [302, 200, 204, 201]:
             return error_log('Error creating Plone site at {}'.format(self.site_url))
         else:
@@ -207,11 +209,11 @@ class GenwebServer(object):
             instances.extend(mountpoint['instances'])
         return instances
 
-    def new_instance(self, instance_name, environment, mountpoint, title, language, ldap_branch):
+    def new_instance(self, instance_name, environment, mountpoint, title, language, ldap_branch, logecho):
 
         environment = self.get_environment(environment)
 
-        site = Plone(environment, mountpoint, instance_name, title, language)
+        site = Plone(environment, mountpoint, instance_name, title, language, logecho)
 
         yield step_log('Creating Plone site')
         yield site.create(packages=['genweb.core:default'])
@@ -226,4 +228,3 @@ class GenwebServer(object):
 
         return {
         }
-
