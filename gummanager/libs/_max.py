@@ -22,7 +22,7 @@ from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import step_log
-from gummanager.libs.utils import success_log
+from gummanager.libs.utils import success_log, StepError, success
 from time import sleep
 
 from collections import namedtuple
@@ -285,19 +285,16 @@ class MaxServer(object):
         if self.remote.file_exists('{}'.format(self.buildout.folder)):
             return error_log('Folder {} already exists'.format(self.buildout.folder))
 
-        success = self.buildout.clone(repo_url)
-
-        if success:
-            return success_log('Succesfully cloned repo at {}'.format(self.buildout.folder))
-        else:
-            return error_log('Error when cloning repo')
+        return success(
+            self.buildout.clone(repo_url),
+            'Succesfully cloned repo at {}'.format(self.buildout.folder)
+        )
 
     def bootstrap_buildout(self):
-        success = self.buildout.bootstrap('max-only.cfg')
-        if success:
-            return success_log('Succesfully bootstraped buildout {}'.format(self.buildout.folder))
-        else:
-            return error_log('Error on bootstraping')
+        return success(
+            self.buildout.bootstrap(),
+            'Succesfully bootstraped buildout {}'.format(self.buildout.folder)
+        )
 
     def configure_instance(self):
 
@@ -319,12 +316,8 @@ class MaxServer(object):
 
         }
 
-        success = self.buildout.configure_file('customizeme.cfg', customizations)
-
-        if success:
-            return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
-        else:
-            return error_log('Error on applying settings on customizeme.cfg')
+        self.buildout.configure_file('customizeme.cfg', customizations),
+        return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
 
     def create_max_nginx_entry(self):
 
@@ -337,12 +330,8 @@ class MaxServer(object):
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
         nginx_file_location = "{}/config/max-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-        success = self.remote.put_file(nginx_file_location, nginxentry)
-
-        if success:
-            return success_log("Succesfully created {}".format(nginx_file_location))
-        else:
-            return error_log('Error when generating nginx config file for max')
+        self.remote.put_file(nginx_file_location, nginxentry)
+        return success_log("Succesfully created {}".format(nginx_file_location))
 
     def create_circus_nginx_entry(self):
 
@@ -352,40 +341,26 @@ class MaxServer(object):
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
         nginx_file_location = "{}/config/circus-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-        success = self.remote.put_file(nginx_file_location, circus_nginxentry)
 
-        if success:
-            return success_log("Succesfully created {}".format(nginx_file_location))
-        else:
-            return error_log('Error when generating nginx config file for max')
+        self.remote.put_file(nginx_file_location, circus_nginxentry),
+        return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def generate_startup_script(self):
+    def create_startup_script(self):
         initd_params = {
             'port_index': int(self.instance.index) + CIRCUS_TCP_BASE_PORT,
             'instance_folder': self.buildout.folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
-        success = self.remote.put_file("/etc/init.d/max_{}".format(self.instance.name), initd_script)
 
-        code, stdout = self.remote.execute("chmod +x /etc/init.d/max_{}".format(self.instance.name))
-        if code != 0:
-            success = False
+        self.remote.put_file("/etc/init.d/max_{}".format(self.instance.name), initd_script)
+        self.remote.execute("chmod +x /etc/init.d/max_{}".format(self.instance.name), do_raise=True)
+        self.remote.execute("update-rc.d max_{} defaults".format(self.instance.name), do_raise=True)
 
-        code, stdout = self.remote.execute("update-rc.d max_{} defaults".format(self.instance.name))
-        if code != 0:
-            success = False
-
-        if success:
-            return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
-        else:
-            return error_log('Error when generating init.d script')
+        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
 
     def execute_buildout(self):
-        success = self.buildout.execute()
-        if success:
-            return success_log("Succesfully created a new max instance")
-        else:
-            return error_log("Error on buildout execution")
+        self.buildout.execute()
+        return success_log("Succesfully created a new max instance")
 
     def set_mongodb_indexes(self):
         new_instance_folder = '{}/{}'.format(
@@ -393,9 +368,9 @@ class MaxServer(object):
             self.instance.name
         )
         code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
-        success = 'Added' in stdout
+        added = 'Added' in stdout
 
-        if success:
+        if added:
             return success_log("Succesfully added indexes")
         else:
             return error_log("Error on adding indexes")
@@ -429,24 +404,19 @@ class MaxServer(object):
         return success_log("Succesfully changed permissions settings")
 
     def commit_local_changes(self):
-        success = self.buildout.commit_to_local_branch(self.config.local_git_branch)
-
-        if success:
-            return success_log("Succesfully commited local changes")
-        else:
-            return error_log("Error on commiting")
+        self.buildout.commit_to_local_branch(self.config.local_git_branch)
+        return success_log("Succesfully commited local changes")
 
     def set_filesystem_permissions(self):
-        success = self.buildout.change_permissions(self.config.process_uid)
-        if success:
-            return success_log("Succesfully changed permissions")
-        else:
-            return error_log("Error on changing permissions")
+        self.buildout.change_permissions(self.config.process_uid)
+        return success_log("Succesfully changed permissions")
 
-    # Recipes
+    # Commands
 
-    def new_instance(self, instance_name, port_index, oauth_instance=None):
+    def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None):
 
+        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.logecho = logecho
         self.buildout.folder = '{}/{}'.format(
             self.config.instances_root,
             instance_name
@@ -457,36 +427,39 @@ class MaxServer(object):
             index=port_index,
             oauth=oauth_instance if oauth_instance is not None else instance_name,
         )
+        try:
+            yield step_log('Cloning buildout')
+            yield self.clone_buildout()
 
-        yield step_log('Cloning buildout')
-        yield self.clone_buildout()
+            yield step_log('Bootstraping buildout')
+            yield self.bootstrap_buildout()
 
-        yield step_log('Bootstraping buildout')
-        yield self.bootstrap_buildout()
+            yield step_log('Configuring customizeme.cfg')
+            yield self.configure_instance()
 
-        yield step_log('Configuring customizeme.cfg')
-        yield self.configure_instance()
+            yield step_log('Creating nginx entry for max')
+            yield self.create_max_nginx_entry()
 
-        yield step_log('Creating nginx entry for max')
-        yield self.create_max_nginx_entry()
+            yield step_log('Creating nginx entry for circus')
+            yield self.create_circus_nginx_entry()
 
-        yield step_log('Creating nginx entry for circus')
-        yield self.create_circus_nginx_entry()
+            yield step_log('Creating init.d script')
+            yield self.create_startup_script()
 
-        yield step_log('Generating init.d script')
-        yield self.generate_startup_script()
+            yield step_log('Executing buildout')
+            yield self.execute_buildout()
 
-        yield step_log('Executing buildout')
-        yield self.execute_buildout()
+            yield step_log('Adding indexes to mongodb')
+            yield self.set_mongodb_indexes()
 
-        yield step_log('Adding indexes to mongodb')
-        yield self.set_mongodb_indexes()
+            yield step_log('Configuring default permissions settings')
+            yield self.configure_max_security_settings()
 
-        yield step_log('Configuring default permissions settings')
-        yield self.configure_max_security_settings()
+            yield step_log('Commiting to local branch')
+            yield self.commit_local_changes()
 
-        yield step_log('Commiting to local branch')
-        yield self.commit_local_changes()
+            yield step_log('Changing permissions')
+            yield self.set_filesystem_permissions()
 
-        yield step_log('Changing permissions')
-        yield self.set_filesystem_permissions()
+        except StepError as error:
+            yield error_log(error.message)

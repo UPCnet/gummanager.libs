@@ -12,6 +12,23 @@ term = Terminal()
 DEBUG_MODE = False
 
 
+def process_output(lines):
+    messages = []
+    for line in lines.split('\n'):
+        messages.append(message_log(line))
+    return messages
+
+
+def success(result, message):
+    messages = process_output(result)
+    messages.append(success_log(message))
+    return messages
+
+
+class StepError(Exception):
+    pass
+
+
 class ReadyCounter(object):
     def __init__(self, event):
         self.count = 0
@@ -31,41 +48,31 @@ class RemoteConnection(object):
         self.ssh = ssh.bake('{}@{}'.format(user, server))
 
     def execute(self, command, **kwargs):
+        do_raise = kwargs.get('do_raise', False)
+        if 'do_raise' in kwargs:
+            del kwargs['do_raise']
         try:
             result = self.ssh(command, **kwargs)
         except ErrorReturnCode as error_code:
+            error_message = 'Error on remote command {}'.format(command)
             if DEBUG_MODE:
-                print '\n' + error_code.stderr + '\n'
+                error_message += '\n' + error_code.stderr
+            if do_raise:
+                raise StepError(error_message)
             return 1, error_code.stderr
 
         return result.exit_code, result.stdout
 
     def file_exists(self, filename):
-        try:
-            self.ssh('ls {}'.format(filename))
-        except ErrorReturnCode as error_code:
-            if DEBUG_MODE:
-                print '\n' + error_code.stderr + '\n'
-            return False
-        return True
+        code, stdout = self.execute('ls {}'.format(filename))
+        return code == 0
 
     def get_file(self, filename):
-        try:
-            result = self.ssh('cat {}'.format(filename))
-        except ErrorReturnCode as error_code:
-            if DEBUG_MODE:
-                print '\n' + error_code.stderr + '\n'
-            return False
-        return result.stdout
+        code, stdout = self.execute('cat {}'.format(filename))
+        return stdout
 
     def put_file(self, filename, content):
-        try:
-            self.ssh("cat > {}".format(filename), _in=content)
-        except ErrorReturnCode as error_code:
-            if DEBUG_MODE:
-                print '\n' + error_code.stderr + '\n'
-            return False
-        # if successfull check back content of file
+        code, stdout = self.execute("cat > {}".format(filename), _in=content)
         return self.get_file(filename) == content
 
 
@@ -93,7 +100,8 @@ def padded_error(string):
     print term.bold_red + '    {}\n'.format(string) + term.normal
 
 
-def padded_log(string, filters=[]):
+def padded_log(string, filters=[], print_stdout=True):
+    log = []
     string = string.rstrip()
     # apply padding to rewrite lines (starting with \r)
     string = re.sub(r'([\r])', r'\1    ', string)
@@ -102,7 +110,12 @@ def padded_log(string, filters=[]):
         matched_filter = re.search(r'({})'.format('|'.join(filters)), line)
         do_print = matched_filter or filters == []
         if do_print:
-            print '    ' + line.rstrip()
+            log.append(line.rstrip())
+
+    loglines = '\n'.join(log)
+    if print_stdout:
+        print loglines
+    return loglines
 
 
 def progress_log(string):

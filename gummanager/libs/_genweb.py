@@ -67,7 +67,7 @@ class Plone(object):
 
         self.echo.start()
         req = requests.post(create_plone_url, params, auth=self.auth)
-        self.echo.kill()
+        self.echo.stop()
         if req.status_code not in [302, 200, 204, 201]:
             return error_log('Error creating Plone site at {}'.format(self.site_url))
         else:
