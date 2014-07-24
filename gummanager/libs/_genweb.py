@@ -89,7 +89,7 @@ class Plone(object):
         else:
             return success_log('Successfully rebuild site catalog'.format(self.site_url))
 
-    def setup_ldap(self, branch=''):
+    def setup_ldap(self, branch='', password):
         setup_view_url = '{}/setupldapexterns'.format(self.site_url)
         req = requests.get(setup_view_url, auth=self.auth)
 
@@ -105,7 +105,7 @@ class Plone(object):
             'groups_base': 'ou=groups,ou={},dc=upcnet,dc=es'.format(branch),
             'groups_scope:int': '2',
             'binduid:string': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(branch),
-            'bindpwd:string': 'secret',
+            'bindpwd:string': password,
             'binduid_usage:int': '1',
             'obj_classes': 'top,person,inetOrgPerson',
             'extra_user_filter': '',
@@ -209,7 +209,7 @@ class GenwebServer(object):
             instances.extend(mountpoint['instances'])
         return instances
 
-    def new_instance(self, instance_name, environment, mountpoint, title, language, ldap_branch, logecho):
+    def new_instance(self, instance_name, environment, mountpoint, title, language, ldap_branch, ldap_password, logecho):
 
         environment = self.get_environment(environment)
 
@@ -222,7 +222,7 @@ class GenwebServer(object):
         yield site.setup_homepage()
 
         yield step_log('Setting up ldap')
-        yield site.setup_ldap(branch=ldap_branch)
+        yield site.setup_ldap(branch=ldap_branch, password=ldap_password)
 
     def get_instance(self, env, mountpoint, plonesite):
 

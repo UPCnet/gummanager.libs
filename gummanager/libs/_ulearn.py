@@ -114,7 +114,7 @@ class ULearnServer(GenwebServer):
         settings = site.get_settings()
         return settings
 
-    def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch, logecho):
+    def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch, ldap_password, logecho):
 
         environment = self.get_environment(environment)
         site = UlearnSite(environment, mountpoint, instance_name, title, language, logecho)
@@ -122,17 +122,17 @@ class ULearnServer(GenwebServer):
         yield step_log('Creating Plone site')
         yield site.create(packages=['ulearn.core:default'])
 
-        # yield step_log('Setting up homepage')
-        # yield site.setup_homepage()
+        yield step_log('Setting up homepage')
+        yield site.setup_homepage()
 
-        # yield step_log('Setting up ldap')
-        # yield site.setup_ldap(branch=ldap_branch)
+        yield step_log('Setting up ldap')
+        yield site.setup_ldap(branch=ldap_branch, password=ldap_password)
 
-        # yield step_log('Setting up max')
-        # yield site.setup_max(max_name, oauth_name, ldap_branch)
+        yield step_log('Setting up max')
+        yield site.setup_max(max_name, oauth_name, ldap_branch)
 
-        # yield step_log('Rebuilding catalog')
-        # yield site.rebuild_catalog()
+        yield step_log('Rebuilding catalog')
+        yield site.rebuild_catalog()
 
-        # yield step_log('Setting up nginx entry @ {}'.format(self.config.prefe_server))
-        # yield self.setup_nginx(site, max_direct_url)
+        yield step_log('Setting up nginx entry @ {}'.format(self.config.prefe_server))
+        yield self.setup_nginx(site, max_direct_url)

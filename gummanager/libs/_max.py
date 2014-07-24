@@ -17,7 +17,7 @@ from gummanager.libs.utils import circus_control
 from gummanager.libs.utils import circus_status
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import padded_error
-from gummanager.libs.utils import padded_log
+from gummanager.libs.utils import padded_log, message_log
 from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
@@ -96,15 +96,25 @@ class MaxServer(object):
                 instances.append(instance)
         return instances
 
-    def reload_nginx_configuration(self):
-        progress_log('Reloading nginx configuration')
-        padded_log('Testing configuration')
+    def test_nginx(self):
         code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
         if code == 0 and 'done' in stdout:
-            padded_success('Configuration test passed')
+            return success_log('Configuration test passed')
         else:
-            padded_error('Configuration test failed')
-            return None
+            return error_log('Configuration test failed')
+
+
+    def reload_nginx(self):
+
+
+
+
+    def reload_nginx_configuration(self):
+        try:
+            yield step_log('Reloading nginx configuration')
+            yield message_log('Testing configuration')
+            yield self.test_nginx()
+
 
         code, stdout = self.remote.execute('/etc/init.d/nginx reload')
         if code == 0 and 'done' in stdout:
@@ -468,3 +478,6 @@ class MaxServer(object):
 
         except StepError as error:
             yield error_log(error.message)
+
+
+    def reload
