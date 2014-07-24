@@ -18,6 +18,7 @@ from gummanager.libs.utils import circus_status
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import padded_error
 from gummanager.libs.utils import padded_log, message_log
+from gummanager.libs.utils import padded_log
 from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
@@ -103,25 +104,22 @@ class MaxServer(object):
         else:
             return error_log('Configuration test failed')
 
-
     def reload_nginx(self):
-
-
-
+        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
+        if code == 0 and 'done' in stdout:
+            return success_log('Nginx reloaded succesfully')
+        else:
+            return error_log('Error reloading nginx')
 
     def reload_nginx_configuration(self):
         try:
             yield step_log('Reloading nginx configuration')
             yield message_log('Testing configuration')
+
             yield self.test_nginx()
-
-
-        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
-        if code == 0 and 'done' in stdout:
-            padded_success('Nginx reloaded succesfully')
-        else:
-            padded_error('Error reloading nginx')
-            return None
+            yield self.reload_nginx()
+        except StepError:
+            yield error_log(error.message)
 
     def start(self, instance_name):
         progress_log('Starting instance')
@@ -369,9 +367,7 @@ class MaxServer(object):
         self.remote.execute("chmod +x {}".format(init_d_script_location), do_raise=True)
         self.remote.execute("update-rc.d {} defaults".format(init_d_script_name), do_raise=True)
 
-        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
-
-        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
+        return success_log("Succesfully created {}".format(init_d_script_location))
 
     def execute_buildout(self):
         self.buildout.execute()
@@ -478,6 +474,3 @@ class MaxServer(object):
 
         except StepError as error:
             yield error_log(error.message)
-
-
-    def reload
