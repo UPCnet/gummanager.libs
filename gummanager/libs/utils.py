@@ -9,13 +9,14 @@ import re
 from blessings import Terminal
 
 term = Terminal()
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 
-def process_output(lines):
+def process_output(lines, prefix=''):
     messages = []
     for line in lines.split('\n'):
-        messages.append(message_log(line))
+        effective_prefix = prefix if line.strip() else ''
+        messages.append(message_log(effective_prefix + line))
     return messages
 
 
@@ -25,8 +26,17 @@ def success(result, message):
     return messages
 
 
+def error(result, message):
+    messages = process_output(result, prefix='> ')
+    messages.append(error_log(message))
+    return messages
+
+
 class StepError(Exception):
-    pass
+    def __init__(self, message, *args, **kwargs):
+        super(StepError, self).__init__(message, *args, **kwargs)
+        if isinstance(message, str):
+            self.message = error_log(message)
 
 
 class ReadyCounter(object):
@@ -54,11 +64,11 @@ class RemoteConnection(object):
         try:
             result = self.ssh(command, **kwargs)
         except ErrorReturnCode as error_code:
-            error_message = 'Error on remote command {}'.format(command)
+            message = ''
             if DEBUG_MODE:
-                error_message += '\n' + error_code.stderr
+                message += error_code.stderr
             if do_raise:
-                raise StepError(error_message)
+                raise StepError(error(message, 'Error on remote command "{}"'.format(command)))
             return 1, error_code.stderr
 
         return result.exit_code, result.stdout
@@ -77,7 +87,10 @@ class RemoteConnection(object):
 
 
 def error_log(message):
-    return (0, message)
+    if isinstance(message, str):
+        return (0, message)
+    else:
+        return message
 
 
 def success_log(message):

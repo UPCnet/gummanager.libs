@@ -1,6 +1,6 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
-from gummanager.libs.utils import parse_ini_from
+from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
 from gummanager.libs.utils import circus_status, circus_control
 from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
@@ -14,7 +14,7 @@ from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from time import sleep
 import re
 
@@ -34,6 +34,10 @@ class OauthServer(object):
             if instance:
                 instances.append(instance)
         return instances
+
+    def set_instance(self, **kwargs):
+        InstanceData = namedtuple('InstanceData', kwargs.keys())
+        self.instance = InstanceData(**kwargs)
 
     def reload_nginx_configuration(self):
         progress_log('Reloading nginx configuration')
@@ -159,47 +163,26 @@ class OauthServer(object):
         ports.sort()
         return ports[-1] + 1 if ports else 1
 
-    def new_instance(self, instance_name, port_index, ldap_branch=None):
+    # Steps
 
-        ldap_name = ldap_branch if ldap_branch is not None else instance_name
+    def clone_buildout(self):
         repo_url = 'https://github.com/UPCnet/maxserver'
-        new_instance_folder = '{}/{}'.format(
-            self.config.instances_root,
-            instance_name
+
+        if self.remote.file_exists('{}'.format(self.buildout.folder)):
+            return error_log('Folder {} already exists'.format(self.buildout.folder))
+
+        return success(
+            self.buildout.clone(repo_url),
+            'Succesfully cloned repo at {}'.format(self.buildout.folder)
         )
 
-        self.buildout.folder = new_instance_folder
+    def bootstrap_buildout(self):
+        return success(
+            self.buildout.bootstrap(),
+            'Succesfully bootstraped buildout {}'.format(self.buildout.folder)
+        )
 
-        if self.remote.file_exists('{}'.format(new_instance_folder)):
-            padded_error('Folder {} already exists'.format(new_instance_folder))
-            return None
-
-        ###########################################################################################
-        progress_log('Cloning buildout')
-
-        success = self.buildout.clone(repo_url)
-
-        if success:
-            padded_success('Succesfully cloned repo at {}'.format(new_instance_folder))
-        else:
-            padded_error('Error when cloning repo')
-            return None
-
-        ###########################################################################################
-
-        progress_log('Bootstraping buildout')
-
-        success = self.buildout.bootstrap('osiris-only.cfg')
-
-        if success:
-            padded_success('Succesfully bootstraped buildout {}'.format(new_instance_folder))
-        else:
-            padded_error('Error on bootstraping')
-            return None
-
-        ###########################################################################################
-
-        progress_log('Configuring customizeme.cfg')
+    def configure_instance(self):
 
         customizations = {
             'hosts': {
@@ -208,134 +191,133 @@ class OauthServer(object):
                 'mongodb_cluster': self.config.mongodb_cluster
             },
             'max-config': {
-                'name': instance_name,
+                'name': self.instance.name,
             },
             'ports': {
-                'port_index': '{:0>2}'.format(port_index),
+                'port_index': '{:0>2}'.format(self.instance.index),
             },
 
         }
 
-        success = self.buildout.configure_file('customizeme.cfg', customizations)
+        self.buildout.configure_file('customizeme.cfg', customizations),
+        return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
 
-        if success:
-            padded_success('Succesfully configured {}/customizeme.cfg'.format(new_instance_folder))
-        else:
-            padded_error('Error on applying settings on customizeme.cfg')
-            return None
+    def configure_ldap(self):
 
-        ###########################################################################################
-
-        progress_log('Generating ldap.ini')
         ldapini = configure_ini(
             string=LDAP_INI,
             params={
                 'ldap': {
                     'server': self.config.ldap_config['server'],
-                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(ldap_name),
-                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(ldap_name),
-                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(ldap_name)
+                    'password': self.config.ldap_config['branch_admin_password'],
+                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(self.instance.ldap),
+                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(self.instance.ldap),
+                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(self.instance.ldap)
                 }
             }
         )
+        ldap_ini_location = "{}/config/ldap.ini".format(self.buildout.folder)
+        self.remote.put_file(ldap_ini_location, ldapini)
+        return success_log('Succesfully configured {}'.format(ldap_ini_location))
 
-        success = self.remote.put_file("{}/config/ldap.ini".format(new_instance_folder), ldapini)
+    def create_max_nginx_entry(self):
 
-        if success:
-            padded_success('Succesfully created {}/config/ldap.ini'.format(new_instance_folder))
-        else:
-            padded_error('Error when generating ldap.ini')
-            return None
-
-        ###########################################################################################
-
-        progress_log('Creating nginx entry')
         nginx_params = {
-            'instance_name': instance_name,
+            'instance_name': self.instance.name,
             'server_dns': self.config.server_dns,
-            'osiris_port': int(port_index) + OSIRIS_BASE_PORT
+            'osiris_port': int(self.instance.index) + OSIRIS_BASE_PORT
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        success = self.remote.put_file("{}/config/osiris-instances/{}.conf".format(self.config.nginx_root, instance_name), nginxentry)
+        nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
+        self.remote.put_file(nginx_file_location, nginxentry)
+        return success_log("Succesfully created {}".format(nginx_file_location))
 
-        if success:
-            padded_success("Succesfully created {}/config/osiris-instances/{}.conf".format(self.config.nginx_root, instance_name))
-        else:
-            padded_error('Error when generating nginx config file')
-            return None
+    def create_circus_nginx_entry(self):
 
-        ###########################################################################################
-
-        progress_log('Creating nginx entry for circus')
         circus_nginx_params = {
-            'circus_nginx_port': int(port_index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_httpd_endpoint': int(port_index) + CIRCUS_HTTPD_BASE_PORT
+            'circus_nginx_port': int(self.instance.index) + CIRCUS_NGINX_BASE_PORT,
+            'circus_httpd_endpoint': int(self.instance.index) + CIRCUS_HTTPD_BASE_PORT
         }
         circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
+        nginx_file_location = "{}/config/circus-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
 
-        success = self.remote.put_file("{}/config/circus-instances/{}.conf".format(self.config.nginx_root, instance_name), circus_nginxentry)
+        self.remote.put_file(nginx_file_location, circus_nginxentry),
+        return success_log("Succesfully created {}".format(nginx_file_location))
 
-        if success:
-            padded_success("Succesfully created {}/config/circus-instances/{}.conf".format(self.config.nginx_root, instance_name))
-        else:
-            padded_error('Error when generating nginx config file for circus')
-            return None
-
-        ###########################################################################################
-
-        progress_log('Generating init.d script')
+    def create_startup_script(self):
         initd_params = {
-            'port_index': int(port_index) + CIRCUS_TCP_BASE_PORT,
-            'instance_folder': new_instance_folder
+            'port_index': int(self.instance.index) + CIRCUS_TCP_BASE_PORT,
+            'instance_folder': self.buildout.folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
 
-        success = self.remote.put_file("/etc/init.d/oauth_{}".format(instance_name), initd_script)
+        init_d_script_name = "oauth_{}".format(self.instance.name)
+        init_d_script_location = "/etc/init.d/{}".format(init_d_script_name)
 
-        code, stdout = self.remote.execute("chmod +x /etc/init.d/oauth_{}".format(instance_name))
-        if code != 0:
-            success = False
+        self.remote.put_file(init_d_script_location, initd_script)
+        self.remote.execute("chmod +x {}".format(init_d_script_location), do_raise=True)
+        self.remote.execute("update-rc.d {} defaults".format(init_d_script_name), do_raise=True)
 
-        code, stdout = self.remote.execute("update-rc.d oauth_{} defaults".format(instance_name))
-        if code != 0:
-            success = False
+        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
 
-        if success:
-            padded_success("Succesfully created /etc/init.d/oauth_{}".format(instance_name))
-        else:
-            padded_error('Error when generating init.d script')
-            return None
+    def execute_buildout(self):
+        self.buildout.execute()
+        return success_log("Succesfully created a new oauth instance")
 
-        ###########################################################################################
+    def commit_local_changes(self):
+        self.buildout.commit_to_local_branch(self.config.local_git_branch)
+        return success_log("Succesfully commited local changes")
 
-        progress_log('Executing buildout')
+    def set_filesystem_permissions(self):
+        self.buildout.change_permissions(self.config.process_uid)
+        return success_log("Succesfully changed permissions")
 
-        success = self.buildout.execute()
-        if success:
-            padded_success("Succesfully created a new oauth instance")
-        else:
-            padded_error("Error on buildout execution")
-            return None
+    def new_instance(self, instance_name, port_index, ldap_branch=None, logecho=None):
 
-        ###########################################################################################
+        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.logecho = logecho
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
 
-        progress_log('Commiting to local branch')
+        self.set_instance(
+            name=instance_name,
+            index=port_index,
+            ldap=ldap_branch if ldap_branch is not None else instance_name
+        )
 
-        success = self.buildout.commit_to_local_branch(self.config.local_git_branch)
-        if success:
-            padded_success("Succesfully commited local changes")
-        else:
-            padded_error("Error on commiting")
-            return None
+        try:
+            yield step_log('Cloning buildout')
+            yield self.clone_buildout()
 
-        ###########################################################################################
+            yield step_log('Bootstraping buildout')
+            yield self.bootstrap_buildout()
 
-        progress_log('Changing folder permissions')
+            yield step_log('Configuring customizeme.cfg')
+            yield self.configure_instance()
 
-        success = self.buildout.change_permissions(self.config.process_uid)
-        if success:
-            padded_success("Succesfully changed permissions")
-            return None
-        else:
-            padded_error("Error on changing permissions")
+            yield step_log('Configuring ldap.ini')
+            yield self.configure_ldap()
+
+            yield step_log('Creating nginx entry for oauth')
+            yield self.create_max_nginx_entry()
+
+            yield step_log('Creating nginx entry for circus')
+            yield self.create_circus_nginx_entry()
+
+            yield step_log('Creating init.d script')
+            yield self.create_startup_script()
+
+            yield step_log('Executing buildout')
+            yield self.execute_buildout()
+
+            yield step_log('Commiting to local branch')
+            yield self.commit_local_changes()
+
+            yield step_log('Changing permissions')
+            yield self.set_filesystem_permissions()
+
+        except StepError as error:
+            yield error.message

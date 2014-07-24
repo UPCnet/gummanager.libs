@@ -352,9 +352,14 @@ class MaxServer(object):
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
 
-        self.remote.put_file("/etc/init.d/max_{}".format(self.instance.name), initd_script)
-        self.remote.execute("chmod +x /etc/init.d/max_{}".format(self.instance.name), do_raise=True)
-        self.remote.execute("update-rc.d max_{} defaults".format(self.instance.name), do_raise=True)
+        init_d_script_name = "max_{}".format(self.instance.name)
+        init_d_script_location = "/etc/init.d/{}".format(init_d_script_name)
+
+        self.remote.put_file(init_d_script_location, initd_script)
+        self.remote.execute("chmod +x {}".format(init_d_script_location), do_raise=True)
+        self.remote.execute("update-rc.d {} defaults".format(init_d_script_name), do_raise=True)
+
+        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
 
         return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
 

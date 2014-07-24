@@ -1,5 +1,4 @@
 from gummanager.libs.utils import padded_log, configure_ini, StepError
-
 import tarfile
 from StringIO import StringIO
 import re
