@@ -89,7 +89,7 @@ class Plone(object):
         else:
             return success_log('Successfully rebuild site catalog'.format(self.site_url))
 
-    def setup_ldap(self, branch='', password):
+    def setup_ldap(self, branch='', password=''):
         setup_view_url = '{}/setupldapexterns'.format(self.site_url)
         req = requests.get(setup_view_url, auth=self.auth)
 
