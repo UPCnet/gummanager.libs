@@ -157,3 +157,9 @@ ULEARN_NGINX_ENTRY = """
         proxy_pass   http://genweb_server;
     }}
 """
+
+BIGMAX_INSTANCE_ENTRY = """[{instance_name}]
+max_server   = https://{max_dns}/{instance_name}
+stomp_server = https://{max_dns}/{instance_name}/stomp
+oauth_server = https://{oauth_dns}/{instance_name}
+"""

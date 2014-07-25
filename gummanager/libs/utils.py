@@ -73,16 +73,16 @@ class RemoteConnection(object):
 
         return result.exit_code, result.stdout
 
-    def file_exists(self, filename):
-        code, stdout = self.execute('ls {}'.format(filename))
+    def file_exists(self, filename, **kwargs):
+        code, stdout = self.execute('ls {}'.format(filename), **kwargs)
         return code == 0
 
-    def get_file(self, filename):
-        code, stdout = self.execute('cat {}'.format(filename))
+    def get_file(self, filename, **kwargs):
+        code, stdout = self.execute('cat {}'.format(filename), **kwargs)
         return stdout
 
-    def put_file(self, filename, content):
-        code, stdout = self.execute("cat > {}".format(filename), _in=content)
+    def put_file(self, filename, content, **kwargs):
+        code, stdout = self.execute("cat > {}".format(filename), _in=content, **kwargs)
         return self.get_file(filename) == content
 
 
