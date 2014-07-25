@@ -319,7 +319,8 @@ class MaxServer(object):
                 'port_index': '{:0>2}'.format(self.instance.index),
             },
             'urls': {
-                'oauth': 'https://{}/{}'.format(self.config.default_oauth_server_dns, self.instance.oauth)
+                'oauth': 'https://{}/{}'.format(self.config.default_oauth_server_dns, self.instance.oauth),
+                'rabbit': 'amqp://{rabbitmq_username}:{rabbitmq_password}@{server}:{port}/%2F'.format(**self.config.utalk)
             }
 
         }
@@ -424,7 +425,7 @@ class MaxServer(object):
 
     # Commands
 
-    def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None):
+    def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None, rabbitmq_url=None):
 
         self.buildout.cfgfile = 'max-only.cfg'
         self.buildout.logecho = logecho
