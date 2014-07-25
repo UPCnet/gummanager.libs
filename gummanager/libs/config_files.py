@@ -163,3 +163,12 @@ max_server   = https://{max_dns}/{instance_name}
 stomp_server = https://{max_dns}/{instance_name}/stomp
 oauth_server = https://{oauth_dns}/{instance_name}
 """
+
+MAXBUNNY_INSTANCE_ENTRY = """[max_{name}]
+hashtag = {hashtag}
+server = {server}
+oauth_server = {oauth_server}
+restricted_user = {restricted_user}
+restricted_user_token = {restricted_user_token}
+language = {language}
+"""

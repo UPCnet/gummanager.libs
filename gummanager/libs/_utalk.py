@@ -23,13 +23,15 @@ from gevent.monkey import patch_socket
 from gevent.event import AsyncResult
 from gummanager.libs.utils import padded_error, padded_success, progress_log, padded_log
 from gummanager.libs.utils import admin_password_for_branch
-from gummanager.libs.utils import ReadyCounter
+from gummanager.libs.utils import ReadyCounter, success_log, RemoteConnection
+from gummanager.libs.config_files import MAXBUNNY_INSTANCE_ENTRY
 
 
 class UTalkServer(object):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
+        self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
 
     def getDomainInfo(self, domain):
         max_info = self.maxserver.get_instance(domain)
@@ -50,6 +52,22 @@ class UTalkServer(object):
             quiet=quiet
         )
         return client
+
+    def add_instance(self, **configuration):
+        configuration['name'] = 'max_{name}'.format(**configuration)
+        configuration['restricted_user_token'] = ''
+
+        instances_file = ''
+        if self.remote.file_exists(self.config.maxbunny_instances_list):
+            instances_file = self.remote.get_file(self.config.maxbunny_instances_list, do_raise=True)
+        if '[{name}]'.format(**configuration) not in instances_file:
+            linebreak = '\n' if instances_file else ''
+            instances_file += linebreak + MAXBUNNY_INSTANCE_ENTRY.format(**configuration)
+            self.remote.put_file(self.config.maxbunny_instances_list, instances_file, do_raise=True)
+        else:
+            return success_log("Instance {name} already in maxbunny instance list".format(**configuration))
+
+        return success_log("Succesfully added {name} to maxbunny instance list".format(**configuration))
 
     def test(self, domain):
         progress_log('Testing UTalk websocket communication')
