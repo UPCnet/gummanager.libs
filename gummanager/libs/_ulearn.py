@@ -1,13 +1,13 @@
 from gummanager.libs.utils import step_log, error_log, success_log, RemoteConnection, padded_error, padded_success, progress_log, padded_log
 from gummanager.libs.config_files import ULEARN_NGINX_ENTRY
 from gummanager.libs._genweb import GenwebServer, Plone
+from gummanager.libs.mixins import TokenHelper
 import requests
-import json
+
 from pyquery import PyQuery
-from collections import namedtuple
 
 
-class UlearnSite(Plone):
+class UlearnSite(Plone, TokenHelper):
 
     def get_settings(self):
         req = requests.get('{}/@@maxui-settings'.format(self.site_url), auth=self.auth)
@@ -20,25 +20,6 @@ class UlearnSite(Plone):
             pqinput = PyQuery(inp)
             settings[pqinput.attr('name').split('.')[-1]] = pqinput.val()
         return settings
-
-    def get_token(self, oauth_server, username, password):
-        payload = {"grant_type": 'password',
-                   "client_id": 'MAX',
-                   "scope": 'widgetcli',
-                   "username": username,
-                   "password": password
-                   }
-
-        req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
-        response = json.loads(req.text)
-        if req.status_code == 200:
-            token = response.get("access_token", False)
-            # Fallback to legacy oauth server
-            if not token:
-                token = response.get("oauth_token")
-            return token
-        else:
-            return None
 
     def setup_max(self, max_name, oauth_name, ldap_branch):
         """

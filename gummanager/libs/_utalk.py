@@ -25,17 +25,18 @@ from gummanager.libs.utils import padded_error, padded_success, progress_log, pa
 from gummanager.libs.utils import admin_password_for_branch
 from gummanager.libs.utils import ReadyCounter, success_log, RemoteConnection
 from gummanager.libs.config_files import MAXBUNNY_INSTANCE_ENTRY
+from gummanager.libs.mixins import TokenHelper
 
 
-class UTalkServer(object):
+class UTalkServer(TokenHelper, object):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
 
     def getDomainInfo(self, domain):
-        max_info = self.maxserver.get_instance(domain)
-        oauth_info = self.oauthserver.instance_by_dns(max_info['oauth'])
+        max_info = self.config.max.get_instance(domain)
+        oauth_info = self.config.oauth.instance_by_dns(max_info['oauth'])
         return {
             'max': max_info,
             'oauth': oauth_info
@@ -54,8 +55,14 @@ class UTalkServer(object):
         return client
 
     def add_instance(self, **configuration):
-        configuration['name'] = 'max_{name}'.format(**configuration)
-        configuration['restricted_user_token'] = ''
+        domain_info = self.getDomainInfo(configuration['name'])
+        ldap_branch = domain_info['oauth']['ldap']['branch']
+
+        configuration['restricted_user_token'] = self.get_token(
+            configuration['oauth_server'],
+            configuration['restricted_user'],
+            admin_password_for_branch(ldap_branch)
+        )
 
         instances_file = ''
         if self.remote.file_exists(self.config.maxbunny_instances_list):
