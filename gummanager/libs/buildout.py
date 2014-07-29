@@ -1,4 +1,4 @@
-from gummanager.libs.utils import padded_log, configure_ini, StepError
+from gummanager.libs.utils import padded_log, configure_ini, StepError, error
 import tarfile
 from StringIO import StringIO
 import re
@@ -31,6 +31,19 @@ class RemoteBuildoutHelper(object):
             raise StepError('Error commiting, unexpected commit message')
         return stdout
 
+    def merge_commit(self, branch_name):
+        commit_message = 'Merged from {}'.format(branch_name)
+        code, stdout = self.remote.execute('cd {} && git commit -m "{}"> /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            commit_message),
+            do_raise=True
+        )
+
+        success = commit_message in stdout
+        if not success:
+            raise StepError('Error commiting, unexpected commit message')
+        return stdout
+
     @property
     def current_branch(self):
         code, stdout = self.remote.execute('cd {} && git status > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
@@ -52,8 +65,17 @@ class RemoteBuildoutHelper(object):
         if code != 0:
             stdout = self.remote.get_file('/tmp/gitlog')
 
-        match = re.search(r"nothing .*? commit(.*?)\n", stdout)
+        # First: search for a conflict status
+        match = re.search(r"Unmerged paths", stdout, re.IGNORECASE)
+        if match:
+            return 'conflict'
 
+        # Second: search for a uncommitted status
+        match = re.search(r"you are still merging", stdout, re.IGNORECASE)
+        if match:
+            return 'uncommitted'
+
+        match = re.search(r"nothing .*? commit(.*?)\n", stdout)
         return 'clean' if match else 'dirty'
 
     # Methods to use external
@@ -92,18 +114,20 @@ class RemoteBuildoutHelper(object):
             raise StepError('Error when configuring {}'.format(remote_file))
         return True
 
-    def execute(self):
+    def execute(self, update=False):
+        modifiers = '-N' if update else ''
+
         commands = [
             'cd {}'.format(self.folder),
             'touch var/log/buildout.log',
-            './bin/buildout -c {} > var/log/buildout.log'.format(self.cfgfile)
+            './bin/buildout {} -c {} > var/log/buildout.log'.format(modifiers, self.cfgfile)
         ]
         self.logecho.start()
         code, stdout = self.remote.execute(' && '.join(commands))
         self.logecho.stop()
         circus_installed = self.remote.file_exists('{}/config/circus.ini'.format(self.folder))
         if not(code == 0 and circus_installed):
-            raise StepError('Error on buildout execution')
+            raise StepError(error(stdout, 'Error on buildout execution'))
         return True
 
     def change_permissions(self, uid):
@@ -125,6 +149,70 @@ class RemoteBuildoutHelper(object):
         if not(code == 0 and success):
             raise StepError('Error when commiting to local branch')
         return commit_log + padded_log(stdout, filters=['Switched', 'M\t'], print_stdout=False)
+
+    def switch_branch(self, branch_name):
+        code, stdout = self.remote.execute('cd {} && git checkout {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            branch_name),
+            do_raise=True
+        )
+        return self.current_branch
+
+    def pull(self):
+        code, stdout = self.remote.execute('cd {} && git pull > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder),
+            do_raise=True
+        )
+        return stdout
+
+    def merge(self, branch_name):
+        code, stdout = self.remote.execute('cd {} && git merge {} --no-commit > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            branch_name),
+            do_raise=True
+        )
+        return stdout
+
+    def upgrade(self, fetch_from, git_branch_name):
+        # Check if the repository is clean and in the local branch
+        is_clean = self.status == 'clean'
+        is_local = self.current_branch == git_branch_name
+
+        messages = ''
+        if not is_clean or not is_local:
+            raise StepError('Check that git repo on {} is clean and on branch {}'.format(
+                self.folder,
+                git_branch_name
+            ))
+
+        # Go back to master
+        current = self.switch_branch(fetch_from)
+        if not(self.status == "clean" and fetch_from == current):
+            raise StepError('Error after switching to {} branch'.format(fetch_from))
+
+        # Pull changes from upstream
+        messages += self.pull()
+        if self.status != "clean":
+            raise StepError('Error after pulling changes from {}'.format(fetch_from))
+
+        # Go back to local branch
+        current = self.switch_branch(git_branch_name)
+        if not(self.status == "clean" and git_branch_name == current):
+            raise StepError('Error after switching to {} branch'.format(fetch_from))
+
+        # Merge upstream with local
+        messages += self.merge(fetch_from)
+        if self.status == 'conflict':
+            # Maybe we can autosolve versions.cfg conflicts ???
+            raise StepError('Conflict detected, please solve them manually'.format(fetch_from))
+
+        elif self.status == 'uncommitted':
+            messages += self.merge_commit(fetch_from)
+
+        if not(self.status == "clean"):
+            raise StepError('Error after commiting merge')
+
+        return messages
 
     @property
     def config_files(self):

@@ -328,9 +328,9 @@ class MaxServer(object):
         self.buildout.configure_file('customizeme.cfg', customizations),
         return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
 
-    def execute_buildout(self):
-        self.buildout.execute()
-        return success_log("Succesfully created a new max instance")
+    def execute_buildout(self, update=False):
+        self.buildout.execute(update=update)
+        return success_log("Succesfully executed buildout")
 
     def set_mongodb_indexes(self):
         new_instance_folder = '{}/{}'.format(
@@ -440,6 +440,10 @@ class MaxServer(object):
 
         return success_log("Succesfully added {} to bigmax instance list".format(self.instance.name))
 
+    def update_buildout(self):
+        result = self.buildout.upgrade('master', self.config.local_git_branch)
+        return success(result, "Succesfully commited local changes")
+
     # Commands
 
     def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None, rabbitmq_url=None):
@@ -492,6 +496,30 @@ class MaxServer(object):
 
             yield step_log('Adding instance to bigmax')
             yield self.add_instance_to_bigmax()
+
+        except StepError as error:
+            yield error_log(error.message)
+
+    def upgrade(self, instance_name, logecho=None):
+        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.logecho = logecho
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
+
+        self.set_instance(
+            name=instance_name,
+        )
+        try:
+            yield step_log('Updating buildout')
+            yield self.update_buildout()
+
+            yield step_log('Executing buildout')
+            yield self.execute_buildout(update=True)
+
+            yield step_log('Changing permissions')
+            yield self.set_filesystem_permissions()
 
         except StepError as error:
             yield error_log(error.message)
