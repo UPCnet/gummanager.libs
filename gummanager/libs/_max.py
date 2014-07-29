@@ -29,6 +29,8 @@ from time import sleep
 from collections import namedtuple
 import gevent
 import pymongo
+import requests
+import re
 
 
 class MaxServer(object):
@@ -42,11 +44,20 @@ class MaxServer(object):
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
-    def get_client(self, instance_name, username, password):
+    def get_client(self, instance_name, username='', password=''):
         instance_info = self.get_instance(instance_name)
         client = MaxClient(instance_info['server']['dns'])
-        client.login(username=username, password=password)
+        if username and password:
+            client.login(username=username, password=password)
         return client
+
+    def get_running_version(self, instance_name):
+        instance_info = self.get_instance(instance_name)
+        return requests.get('{}/info'.format(instance_info['server']['dns'])).json().get('version', '???')
+
+    def get_expected_version(self, instance_name):
+        versions = self.remote.get_file('{}/versions.cfg'.format(self.buildout.folder))
+        return re.search(r'\smax\s=\s(.*?)\s', versions, re.MULTILINE).groups()[0]
 
     def get_instance(self, instance_name):
         if instance_name not in self._instances:
@@ -118,7 +129,7 @@ class MaxServer(object):
 
             yield self.test_nginx()
             yield self.reload_nginx()
-        except StepError:
+        except StepError as error:
             yield error_log(error.message)
 
     def start(self, instance_name):
@@ -151,16 +162,36 @@ class MaxServer(object):
         circus_control(
             'stop',
             endpoint=instance['circus_tcp'],
-            process='osiris'
+            process='max'
         )
 
         padded_log('Waiting for circus to shutdown...')
         sleep(1)
         status = self.get_status(instance_name)
         if status['status'] == 'stopped':
-            padded_success('Osiris Max instance {} stopped'.format(instance_name))
+            padded_success('Max instance {} stopped'.format(instance_name))
         else:
-            padded_error('Osiris Max instance {} still active'.format(instance_name))
+            padded_error('Max instance {} still active'.format(instance_name))
+
+    def reload(self, instance_name, process_name):
+        status = self.get_status(instance_name)
+        instance = self.get_instance(instance_name)
+
+        if status['status'][process_name] == 'unknown':
+            code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
+
+        elif status['status'][process_name] == 'stopped':
+            circus_control(
+                'start',
+                endpoint=instance['circus_tcp'],
+                process=process_name
+            )
+        elif status['status'][process_name] == 'active':
+            circus_control(
+                'reload',
+                endpoint=instance['circus_tcp'],
+                process=process_name
+            )
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
@@ -444,6 +475,24 @@ class MaxServer(object):
         result = self.buildout.upgrade('master', self.config.local_git_branch)
         return success(result, "Succesfully commited local changes")
 
+    def reload_instance(self):
+        self.reload(self.instance.name, 'max')
+        sleep(1)
+        status = self.get_status(self.instance.name)
+        if status['status']['max'] == 'active':
+            return success_log("Succesfully restarted max {}".format(self.instance.name))
+        else:
+            return error_log('Max instance {} is not running'.format(self.instance.name))
+
+    def check_version(self):
+        running_version = self.get_running_version(self.instance.name)
+        expected_version = self.get_expected_version(self.instance.name)
+
+        if running_version == expected_version:
+            return success_log("Max {} is running on {}".format(self.instance.name, running_version))
+        else:
+            return success_log("Max {} is running on {}, but {} was expected".format(self.instance.name, running_version, expected_version))
+
     # Commands
 
     def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None, rabbitmq_url=None):
@@ -520,6 +569,12 @@ class MaxServer(object):
 
             yield step_log('Changing permissions')
             yield self.set_filesystem_permissions()
+
+            yield step_log('Reloading max')
+            yield self.reload_instance()
+
+            yield step_log('Checking running version')
+            yield self.check_version()
 
         except StepError as error:
             yield error_log(error.message)
