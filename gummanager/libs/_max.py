@@ -461,7 +461,7 @@ class MaxServer(object):
         if '[{}]'.format(self.instance.name) not in instances_file:
             linebreak = '\n' if instances_file else ''
             instances_file += linebreak + BIGMAX_INSTANCE_ENTRY.format(**{
-                "server_dns": self.config.server,
+                "server_dns": self.config.server_dns,
                 "oauth_dns": self.config.default_oauth_server_dns,
                 "instance_name": self.instance.name,
                 "oauth_name": self.instance.oauth,
