@@ -275,7 +275,7 @@ class OauthServer(object):
 
     def new_instance(self, instance_name, port_index, ldap_branch=None, logecho=None):
 
-        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.cfgfile = 'osiris-only.cfg'
         self.buildout.logecho = logecho
         self.buildout.folder = '{}/{}'.format(
             self.config.instances_root,
