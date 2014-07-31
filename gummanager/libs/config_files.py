@@ -123,7 +123,7 @@ ULEARN_NGINX_ENTRY = """
         rewrite ^([^.]*[^/])$ $1/ permanent;
     }}
 
-    location ~* ^/{instance_name}/max/stomp {
+    location ~* ^/{instance_name}/max/stomp {{
         proxy_set_header X-Virtual-Host-URI $scheme://$host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host $http_host;
@@ -133,7 +133,7 @@ ULEARN_NGINX_ENTRY = """
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-     }
+     }}
 
 
     location ~ ^/{instance_name}/max/(.*) {{
