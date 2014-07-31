@@ -1,11 +1,53 @@
 Changelog
 =========
 
-1.3 (unreleased)
+1.3 (2014-07-31)
 ----------------
 
-- Nothing changed yet.
-
+* Better var names [Carles Bruguera]
+* Reload and check version after upgrade [Carles Bruguera]
+* Add max upgrade recipe [Carles Bruguera]
+* Create a mixin to store token helpers [Carles Bruguera]
+* Calculate password for restricted user [Carles Bruguera]
+* Add utalk add instance WIP [Carles Bruguera]
+* Add max instance to bigmax [Carles Bruguera]
+* Configure rabbit url [Carles Bruguera]
+* Fix bug with kwargs [Carles Bruguera]
+* Cleanup [Carles Bruguera]
+* Refactor oauth add instance recipe [Carles Bruguera]
+* Refactor to get rid of all prints WIP [Carles Bruguera]
+* Add LogEcho to create process [Carles Bruguera]
+* Generate password based on ldap branch name [Carles Bruguera]
+* Improve step definition [Carles Bruguera]
+* Fix config object references [Carles Bruguera]
+* Remove intermediate src folder [Carles Bruguera]
+* Depend on gevent [Carles Bruguera]
+* Fix config object bugs [Carles Bruguera]
+* Refactor all servers to read config from args [Carles Bruguera]
+* Refactor options storage in self.options for ldap [Carles Bruguera]
+* Force reload config files [Carles Bruguera]
+* uncomment and fix last max steps [Carles Bruguera]
+* Fix set security settings [Carles Bruguera]
+* Fix last steps logs [Carles Bruguera]
+* Add comiting to local branch [Carles Bruguera]
+* Create base users [Carles Bruguera]
+* Last step to oauth creation, commit local changes [Carles Bruguera]
+* Use user and password from config file [Carles Bruguera]
+* ldap list branch users [Carles Bruguera]
+* ldap del branch user [Carles Bruguera]
+* Do not cd to / at connect [Carles Bruguera]
+* Use branch user to add users [Carles Bruguera]
+* Move test utalk to new utalk target [Carles Bruguera]
+* Test activity notifications [Carles Bruguera]
+* Finis max websocket tests [Carles Bruguera]
+* Allow authenticate as ldap branch user [Carles Bruguera]
+* Update nginx config for ulearn [Carles Bruguera]
+* Send message and listen for them [Carles Bruguera]
+* max test WIP [Carles Bruguera]
+* Test max WIP [Carles Bruguera]
+* Check user method [Carles Bruguera]
+* Finish ldap add user [Carles Bruguera]
+* max test and ldap add user WIP [Carles Bruguera]
 
 1.2 (2014-05-15)
 ----------------
