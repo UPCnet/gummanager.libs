@@ -13,7 +13,6 @@ groupcache = 600
 
 INIT_D_SCRIPT = """#!/bin/sh
 # chkconfig: - 85 15
-# description: Arranque de los servicios relacionados con la instancia de oauth
 
 WORKDIR={instance_folder}
 CONFDIR=$WORKDIR/config
@@ -31,7 +30,7 @@ case "$1" in
         $WORKDIR/bin/circusctl --endpoint tcp://127.0.0.1:$ENDPOINT restart
 ;;
 *)
-    echo "Usage: /etc/init.d/oauth_<CLIENT> {{ start | stop | restart }}"
+    echo "Usage: $0 {{ start | stop | restart }}"
     ;;
 esac
 exit 0
@@ -159,9 +158,9 @@ ULEARN_NGINX_ENTRY = """
 """
 
 BIGMAX_INSTANCE_ENTRY = """[{instance_name}]
-max_server   = https://{max_dns}/{instance_name}
-stomp_server = https://{max_dns}/{instance_name}/stomp
-oauth_server = https://{oauth_dns}/{instance_name}
+max_server   = https://{server_dns}/{instance_name}
+stomp_server = https://{server_dns}/{instance_name}/stomp
+oauth_server = https://{oauth_dns}/{oauth_name}
 """
 
 MAXBUNNY_INSTANCE_ENTRY = """[max_{name}]
