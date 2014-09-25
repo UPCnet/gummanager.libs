@@ -58,6 +58,22 @@ class RemoteBuildoutHelper(object):
         return branch_name if (code == 0 and branch_name) else None
 
     @property
+    def conflicted_files(self):
+        code, stdout = self.remote.execute('cd {} && git status > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder)
+        )
+        if code != 0:
+            stdout = self.remote.get_file('/tmp/gitlog')
+        conflicts = []
+        # First: search for a conflict status
+        match = re.search(r"Unmerged paths", stdout, re.IGNORECASE)
+        if match:
+            unmerged_paths = stdout[match.end():]
+            conflicts = re.findall(r'\#\s+(?:.*?):\s+(.*?)\n', unmerged_paths)
+
+        return conflicts
+
+    @property
     def status(self):
         code, stdout = self.remote.execute('cd {} && git status > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder)
@@ -72,6 +88,11 @@ class RemoteBuildoutHelper(object):
 
         # Second: search for a uncommitted status
         match = re.search(r"you are still merging", stdout, re.IGNORECASE)
+        if match:
+            return 'uncommitted'
+
+        # Third: search for a normal pending to be committed
+        match = re.search(r"changes to be committed", stdout, re.IGNORECASE)
         if match:
             return 'uncommitted'
 
@@ -161,7 +182,7 @@ class RemoteBuildoutHelper(object):
     def pull(self):
         code, stdout = self.remote.execute('cd {} && git pull > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder),
-            do_raise=True
+            do_raise=False
         )
         return stdout
 
@@ -169,6 +190,19 @@ class RemoteBuildoutHelper(object):
         code, stdout = self.remote.execute('cd {} && git merge {} --no-commit > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder,
             branch_name),
+            do_raise=False
+        )
+        return stdout
+
+    def restore_theirs(self, filename):
+        code, stdout = self.remote.execute('cd {} && git checkout --theirs {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            filename),
+            do_raise=True
+        )
+        code, stdout = self.remote.execute('cd {} && git add {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            filename),
             do_raise=True
         )
         return stdout
@@ -179,8 +213,21 @@ class RemoteBuildoutHelper(object):
         is_local = self.current_branch == git_branch_name
 
         messages = ''
-        if not is_clean or not is_local:
-            raise StepError('Check that git repo on {} is clean and on branch {}'.format(
+
+        # If repo is clean, try to switch to local branch
+        if not is_local and is_clean:
+            current = self.switch_branch(git_branch_name)
+            messages += "Switched to branch {}".format(current)
+            is_local = self.current_branch == git_branch_name
+
+        if not is_local:
+            raise StepError('Check that git repo is on {} on branch {}'.format(
+                self.folder,
+                git_branch_name
+            ))
+
+        if not is_clean:
+            raise StepError('Check that git repo on {} is clean'.format(
                 self.folder,
                 git_branch_name
             ))
@@ -203,14 +250,18 @@ class RemoteBuildoutHelper(object):
         # Merge upstream with local
         messages += self.merge(fetch_from)
         if self.status == 'conflict':
-            # Maybe we can autosolve versions.cfg conflicts ???
-            raise StepError('Conflict detected, please solve them manually'.format(fetch_from))
+            # Autosolve versions.cfg conflicts. Remote wins
+            if self.conflicted_files == ['versions.cfg']:
+                self.restore_theirs('versions.cfg')
+                messages += "Conflict in versions.cfg, picking master version.\n"
+            else:
+                raise StepError('Conflict(s) detected, please solve them manually'.format(fetch_from))
 
-        elif self.status == 'uncommitted':
-            messages += self.merge_commit(fetch_from)
+        if self.status == 'uncommitted':
+            messages += self.merge_commit(fetch_from).split('>')[0]
 
         if not(self.status == "clean"):
-            raise StepError('Error after commiting merge')
+            raise StepError('Error after commiting merge, status {} ?'.format(self.status))
 
         return messages
 
