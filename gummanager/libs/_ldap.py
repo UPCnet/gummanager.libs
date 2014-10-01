@@ -5,7 +5,8 @@ import ldap.modlist as modlist
 import os
 from collections import OrderedDict
 from gummanager.libs.utils import admin_password_for_branch
-
+from gummanager.libs.batch import read_csv
+from gummanager.libs.utils import step_log, error_log, success_log
 
 LDAP_USER_NOT_FOUND = 0x100
 LDAP_INVALID_CREDENTIALS = 0x101
@@ -16,8 +17,11 @@ class LdapServer(object):
 
         self.config = config
 
-        self.ldap_uri = '{server}:{port}'.format(**self.config)
+        self.set_server(**self.config)
         self.leaf_dn = ''
+
+    def set_server(self, **params):
+        self.ldap_uri = '{server}:{port}'.format(**params)
 
     def connect(self, auth=True):
         self.ld = ldap.initialize(self.ldap_uri)
@@ -211,3 +215,36 @@ class LdapServer(object):
             return result_set
         except ldap.LDAPError, e:
             print e
+
+    # Commands
+
+    def batch_add_users(self, branch_name, usersfile):
+        self.connect(auth=False)
+        self.authenticate(
+            username=self.config['branch_admin_cn'],
+            password=self.config['branch_admin_password'],
+            branch=branch_name,
+            userdn=False)
+
+        self.cd('/')
+        self.cd('ou=users,ou={}'.format(branch_name))
+
+        users = read_csv(usersfile)
+        yield step_log('Creating {} users '.format(len(users)))
+
+        for count, user in enumerate(users, start=1):
+            try:
+                username, displayname, password = user[:3]
+            except:
+                yield error_log('Error parsing user at line #{}'.format(count))
+                continue
+
+            try:
+                resp = self.addUser(username, displayname, password)
+                yield success_log('User {} created'.format(username))
+            except ldap.ALREADY_EXISTS:
+                yield error_log('User {} already exists'.format(username))
+            except Exception as exc:
+                yield error_log('Error creating user {}: {}'.format(username), exc.__repr__())
+
+        self.disconnect()
