@@ -1,8 +1,11 @@
-from gummanager.libs.utils import step_log, error_log, success_log, RemoteConnection, padded_error, padded_success, progress_log, padded_log
+from gummanager.libs.utils import step_log, error_log, raising_error_log, success_log, RemoteConnection, padded_error, padded_success, progress_log, padded_log
 from gummanager.libs.config_files import ULEARN_NGINX_ENTRY
 from gummanager.libs._genweb import GenwebServer, Plone
 from gummanager.libs.mixins import TokenHelper
+from gummanager.libs.batch import read_users_file
+
 import requests
+from collections import Counter
 
 from pyquery import PyQuery
 
@@ -20,6 +23,29 @@ class UlearnSite(Plone, TokenHelper):
             pqinput = PyQuery(inp)
             settings[pqinput.attr('name').split('.')[-1]] = pqinput.val()
         return settings
+
+    def add_user(self, **user):
+        new_username = user['username']
+        add_user_url = '{}/api/people/{}'.format(self.site_url, new_username)
+
+        site_settings = self.get_settings()
+        response = requests.post(
+            add_user_url,
+            headers=self.oauth_headers(
+                site_settings['max_restricted_username'],
+                site_settings['max_restricted_token'],
+            ),
+            data=user,
+            verify=False)
+
+        if response.status_code in [200, 201]:
+            try:
+                response.json()
+            except ValueError:
+                # If no json colud be decoded, 99.99% that is the unauthorized Plone view
+                # but it could be a crash
+                return {'error': True, 'message': 'Unauthorized or server error'}
+        return response.json()
 
     def setup_max(self, max_name, oauth_name, ldap_branch):
         """
@@ -94,6 +120,63 @@ class ULearnServer(GenwebServer):
         site = UlearnSite(environment, mountpoint, plonesite, '', '')
         settings = site.get_settings()
         return settings
+
+    def add_user(self, instance, user):
+        """
+        """
+        pass
+
+    @staticmethod
+    def check_users(users):
+        """
+            Check user list consistency, raises on validation errors
+        """
+
+        # Look for repeated users
+        usernames = [a['username'] for a in users]
+        duplicates = [k for k, v in Counter(usernames).items() if v > 1]
+        if duplicates:
+            raise Exception('Found duplicated users: {}'.format(', '.join(duplicates)))
+
+        # Look for repeated emails
+        emails = [a['email'] for a in users]
+        duplicates = [k for k, v in Counter(emails).items() if v > 1]
+        if duplicates:
+            raise Exception('Found duplicated emails: {}'.format(', '.join(duplicates)))
+
+        # Look for users withuot password
+        users_without_password = [a['username'] for a in users if a['password'].strip() == '']
+        if users_without_password:
+            raise Exception('Found users without password: {}'.format(', '.join(users_without_password)))
+
+    # COMMANDS
+
+    def batch_add_users(self, instance, usersfile):
+        site = UlearnSite(
+            self.get_environment(instance['environment']),
+            instance['mountpoint'],
+            instance['plonesite'])
+        try:
+            users = read_users_file(usersfile, required_fields=['username', 'fullname', 'email', 'password'])
+        except Exception as exc:
+            error_message = 'Error parsing users file {}: {{}}'.format(usersfile)
+            yield raising_error_log(error_message.format(exc.message))
+
+        try:
+            self.check_users(users)
+        except Exception as exc:
+            yield raising_error_log(exc.message)
+
+        yield step_log('Creating {} users '.format(len(users)))
+        for count, user in enumerate(users, start=1):
+            if not user:
+                yield error_log('Error parsing user at line #{}'.format(count))
+                continue
+            succeeded = site.add_user(**user)
+            if not succeeded.get('error', False):
+                yield success_log(succeeded['message'])
+            else:
+                yield error_log(succeeded['message'])
 
     def new_instance(self, instance_name, environment, mountpoint, title, language, max_name, max_direct_url, oauth_name, ldap_branch, ldap_password, logecho):
 

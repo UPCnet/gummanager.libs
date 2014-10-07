@@ -23,3 +23,14 @@ class TokenHelper(object):
             return token
         else:
             return None
+
+    @staticmethod
+    def oauth_headers(username, token):
+        """
+        """
+        headers = {
+            'X-Oauth-Token': token,
+            'X-Oauth-Username': username,
+            'X-Oauth-Scope': "widgetcli"
+        }
+        return headers

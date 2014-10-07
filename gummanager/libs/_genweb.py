@@ -17,7 +17,7 @@ import requests
 
 
 class Plone(object):
-    def __init__(self, environment, mountpoint, plonesite, title, language, logecho=None):
+    def __init__(self, environment, mountpoint, plonesite, title="", language="", logecho=None):
         self.environment = environment
         self.mountpoint = mountpoint
         self.plonesite = plonesite

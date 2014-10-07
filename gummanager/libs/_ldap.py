@@ -5,8 +5,9 @@ import ldap.modlist as modlist
 import os
 from collections import OrderedDict
 from gummanager.libs.utils import admin_password_for_branch
-from gummanager.libs.batch import read_csv
-from gummanager.libs.utils import step_log, error_log, success_log
+from gummanager.libs.batch import read_users_file
+from gummanager.libs.utils import step_log, error_log, success_log, raising_error_log
+from collections import Counter
 
 LDAP_USER_NOT_FOUND = 0x100
 LDAP_INVALID_CREDENTIALS = 0x101
@@ -88,13 +89,13 @@ class LdapServer(object):
         salt = os.urandom(16)
         return '{ssha}' + base64.b64encode(hashlib.sha1(password + salt).digest() + salt)
 
-    def addUser(self, user_name, display_name, password):
-        dn = 'cn={},{}'.format(user_name, self.dn)
+    def addUser(self, username, fullname, password, **kwargs):
+        dn = 'cn={},{}'.format(username, self.dn)
 
         ldif = modlist.addModlist({
             'objectclass': ['top', 'organizationalPerson', 'person', 'inetOrgPerson'],
-            'cn': user_name.encode('utf-8'),
-            'sn': display_name.encode('utf-8'),
+            'cn': username.encode('utf-8'),
+            'sn': fullname.encode('utf-8'),
             'userPassword': self.ssha(password.encode('utf-8'))
         })
 
@@ -216,6 +217,23 @@ class LdapServer(object):
         except ldap.LDAPError, e:
             print e
 
+    @staticmethod
+    def check_users(users):
+        """
+            Check user list consistency, raises on validation errors
+        """
+
+        # Look for repeated users
+        usernames = [a['username'] for a in users]
+        duplicates = [k for k, v in Counter(usernames).items() if v > 1]
+        if duplicates:
+            raise Exception('Found duplicated users: {}'.format(', '.join(duplicates)))
+
+        # Look for users withuot password
+        users_without_password = [a['username'] for a in users if a['password'].strip() == '']
+        if users_without_password:
+            raise Exception('Found users without password: {}'.format(', '.join(users_without_password)))
+
     # Commands
 
     def batch_add_users(self, branch_name, usersfile):
@@ -229,22 +247,30 @@ class LdapServer(object):
         self.cd('/')
         self.cd('ou=users,ou={}'.format(branch_name))
 
-        users = read_csv(usersfile)
-        yield step_log('Creating {} users '.format(len(users)))
+        try:
+            users = read_users_file(usersfile, required_fields=['username', 'fullname', 'password'])
+        except Exception as exc:
+            error_message = 'Error parsing users file {}: {{}}'.format(usersfile)
+            yield raising_error_log(error_message.format(exc.message))
 
+        try:
+            self.check_users(users)
+        except Exception as exc:
+            yield raising_error_log(exc.message)
+
+        yield step_log('Creating {} users '.format(len(users)))
         for count, user in enumerate(users, start=1):
-            try:
-                username, displayname, password = user[:3]
-            except:
+            import ipdb;ipdb.set_trace()
+            if not user:
                 yield error_log('Error parsing user at line #{}'.format(count))
                 continue
 
             try:
-                resp = self.addUser(username, displayname, password)
-                yield success_log('User {} created'.format(username))
+                resp = self.addUser(**user)
+                yield success_log('User {} created'.format(user['username']))
             except ldap.ALREADY_EXISTS:
-                yield error_log('User {} already exists'.format(username))
+                yield error_log('User {} already exists'.format(user['username']))
             except Exception as exc:
-                yield error_log('Error creating user {}: {}'.format(username), exc.__repr__())
+                yield error_log('Error creating user {}: {}'.format(user['username']), exc.__repr__())
 
         self.disconnect()

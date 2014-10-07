@@ -93,6 +93,13 @@ def error_log(message):
         return message
 
 
+def raising_error_log(message):
+    if isinstance(message, str):
+        return (4, message)
+    else:
+        return message
+
+
 def success_log(message):
     return (1, message)
 
