@@ -1,6 +1,17 @@
 Changelog
 =========
 
+1.6 (2014-10-09)
+----------------
+* Add subscribe users command, [Carles Bruguera]
+* Reorganize batch utilities [Carles Bruguera]
+* Add ulearn add users [Carles Bruguera]
+* Add batching utilities to read from csv or xls [Carles Bruguera]
+* Refactor ldap add users to use new batching utilities [Carles Bruguera]
+* add ldap batch add users command [Carles Bruguera]
+* Improve upgrade process [Carles Bruguera]
+* Preparing release 1.5 [Carles Bruguera]
+
 1.5 (2014-07-31)
 ----------------
 
