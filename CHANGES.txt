@@ -1,11 +1,11 @@
 Changelog
 =========
 
-1.7 (unreleased)
-----------------
+1.6.1 (2014-10-09)
+------------------
 
-- Nothing changed yet.
-
+* Add more columns to batch [Carles Bruguera]
+* convert ints and floats from xls to string [Carles Bruguera]
 
 1.6 (2014-10-09)
 ----------------
