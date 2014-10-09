@@ -1,5 +1,6 @@
 import xlrd
 import unicodedata
+import re
 
 
 def make_subs(label):
@@ -12,8 +13,16 @@ def make_subs(label):
         return 'email'
     elif normalized_label in ['password', 'pass', 'palabraclave', 'paraulaclau', ]:
         return 'password'
-    elif normalized_label in ['owners', 'propietarios', 'propietaris']:
-        return 'owners'
+    elif normalized_label in ['password', 'pass', 'palabraclave', 'paraulaclau', ]:
+        return 'password'
+    elif normalized_label in ['telefon', 'telefono', 'phone', 'tel']:
+        return 'telefon'
+    elif normalized_label in ['ubicacio', 'ubicacion']:
+        return 'ubicacio'
+    elif normalized_label in ['twitterusername', 'twitteruser', 'twitter']:
+        return 'twitter_username'
+    elif normalized_label in ['homepage', 'paginaweb', 'web']:
+        return 'home_page'
     elif normalized_label in ['readers', 'lectors', 'lectores']:
         return 'readers'
     elif normalized_label in ['editors', 'editores']:
@@ -24,7 +33,7 @@ def make_subs(label):
 
 def get_field_positions(labels):
     field_map = {}
-    labels = [label.replace(' ', '').lower() for label in labels]
+    labels = [re.sub(r'[\-\_\s]', '', label).lower() for label in labels]
     for pos, label in enumerate(labels):
         field_map[pos] = make_subs(label)
 
@@ -76,12 +85,27 @@ def read_csv(csvfile, required_fields=[]):
     return lines
 
 
+def normalize_cols(row):
+    normalized_row = []
+    for col in row:
+        # floats now allowed, convert to int'd string
+        if isinstance(col, float):
+            value = str(int(col))
+        # same with ints
+        elif isinstance(col, int):
+            value = str(col)
+        else:
+            value = col.strip()
+        normalized_row.append(value)
+    return normalized_row
+
+
 def parse_users(rows, required_fields=[]):
     fields = validate_header(rows, required_fields=required_fields)
     users = []
 
     for rawrow in rows[1:]:
-        row = [col.strip() for col in rawrow]
+        row = normalize_cols(rawrow)
         row_empty = len([col for col in row if col]) == 0
         if not row_empty:
             user = {}
@@ -97,8 +121,7 @@ def parse_subscriptions(rows, required_fields=[]):
 
     subscriptions = {}
     for rawrow in rows[2:]:
-        row = [col.strip() for col in rawrow]
-
+        row = normalize_cols(rawrow)
         for fieldpos, fieldname in fields.items():
             username = row[fieldpos]
             if username:
