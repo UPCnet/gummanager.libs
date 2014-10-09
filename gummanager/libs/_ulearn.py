@@ -3,11 +3,13 @@ from gummanager.libs.config_files import ULEARN_NGINX_ENTRY
 from gummanager.libs._genweb import GenwebServer, Plone
 from gummanager.libs.mixins import TokenHelper
 from gummanager.libs.batch import read_users_file
+from gummanager.libs.batch import read_subscriptions_file
 
 import requests
 from collections import Counter
 
 from pyquery import PyQuery
+from hashlib import sha1
 
 
 class UlearnSite(Plone, TokenHelper):
@@ -36,6 +38,30 @@ class UlearnSite(Plone, TokenHelper):
                 site_settings['max_restricted_token'],
             ),
             data=user,
+            verify=False)
+
+        if response.status_code in [200, 201]:
+            try:
+                response.json()
+            except ValueError:
+                # If no json colud be decoded, 99.99% that is the unauthorized Plone view
+                # but it could be a crash
+                return {'error': True, 'message': 'Unauthorized or server error'}
+        return response.json()
+
+    def subscribe_users(self, **users):
+        community_url = users.pop('url')
+        community_hash = sha1(community_url).hexdigest()
+        add_subscriptions_url = '{}/api/communities/{}/subscriptions'.format(self.site_url, community_hash)
+
+        site_settings = self.get_settings()
+        response = requests.post(
+            add_subscriptions_url,
+            headers=self.oauth_headers(
+                site_settings['max_restricted_username'],
+                site_settings['max_restricted_token'],
+            ),
+            data=users,
             verify=False)
 
         if response.status_code in [200, 201]:
@@ -173,6 +199,26 @@ class ULearnServer(GenwebServer):
                 yield error_log('Error parsing user at line #{}'.format(count))
                 continue
             succeeded = site.add_user(**user)
+            if not succeeded.get('error', False):
+                yield success_log(succeeded['message'])
+            else:
+                yield error_log(succeeded['message'])
+
+    def batch_subscribe_users(self, instance, subscriptionsfile):
+        site = UlearnSite(
+            self.get_environment(instance['environment']),
+            instance['mountpoint'],
+            instance['plonesite'])
+        try:
+            communities = read_subscriptions_file(subscriptionsfile, required_fields=['owners', 'readers', 'editors'])
+        except Exception as exc:
+            error_message = 'Error parsing subscriptionsfile file {}: {{}}'.format(subscriptionsfile)
+            yield raising_error_log(error_message.format(exc.message))
+
+        for community in communities:
+            yield step_log('Subscribing users to {}'.format(community['url']))
+
+            succeeded = site.subscribe_users(**community)
             if not succeeded.get('error', False):
                 yield success_log(succeeded['message'])
             else:
