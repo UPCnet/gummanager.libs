@@ -268,7 +268,7 @@ class RemoteBuildoutHelper(object):
     @property
     def config_files(self):
         if not self._remote_config_files:
-            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root))
+            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root), do_raise=True)
             if stdout:
                 tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
                 for taredfile in tar.members:
