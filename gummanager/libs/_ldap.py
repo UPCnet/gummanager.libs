@@ -260,7 +260,6 @@ class LdapServer(object):
 
         yield step_log('Creating {} users '.format(len(users)))
         for count, user in enumerate(users, start=1):
-            import ipdb;ipdb.set_trace()
             if not user:
                 yield error_log('Error parsing user at line #{}'.format(count))
                 continue
