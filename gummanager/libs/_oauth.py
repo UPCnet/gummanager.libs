@@ -183,14 +183,12 @@ class OauthServer(object):
         )
 
     def configure_instance(self):
-
         customizations = {
-            'hosts': {
-                'main': self.config.server_dns,
-                'rabbitmq': self.config.rabbitmq_server,
-                'mongodb_cluster': self.config.mongodb_cluster
+            'mongodb-config': {
+                'replica_set': self.config.replica_set,
+                'cluster_hosts': self.config.mongodb_cluster
             },
-            'max-config': {
+            'osiris-config': {
                 'name': self.instance.name,
             },
             'ports': {
@@ -266,7 +264,12 @@ class OauthServer(object):
         return success_log("Succesfully created a new oauth instance")
 
     def commit_local_changes(self):
-        self.buildout.commit_to_local_branch(self.config.local_git_branch)
+        self.buildout.commit_to_local_branch(
+            self.config.local_git_branch,
+            files=[
+                'customizeme.cfg',
+                'mongoauth.cfg'
+            ])
         return success_log("Succesfully commited local changes")
 
     def set_filesystem_permissions(self):
@@ -304,11 +307,11 @@ class OauthServer(object):
             yield step_log('Creating nginx entry for oauth')
             yield self.create_max_nginx_entry()
 
-            yield step_log('Creating nginx entry for circus')
-            yield self.create_circus_nginx_entry()
+#            yield step_log('Creating nginx entry for circus')
+#            yield self.create_circus_nginx_entry()
 
-            yield step_log('Creating init.d script')
-            yield self.create_startup_script()
+#            yield step_log('Creating init.d script')
+#            yield self.create_startup_script()
 
             yield step_log('Executing buildout')
             yield self.execute_buildout()

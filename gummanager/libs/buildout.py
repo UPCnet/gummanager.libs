@@ -18,6 +18,16 @@ class RemoteBuildoutHelper(object):
     def reload(self):
         self._remote_config_files = {}
 
+    def add(self, files):
+        code, stdout = self.remote.execute('cd {} && git add {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            ' '.join(files)),
+            do_raise=True
+        )
+
+        success = code == 0
+        return success
+
     def commit(self):
         commit_message = 'Setup custom configuration'
         code, stdout = self.remote.execute('cd {} && git commit . -m "{}"> /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
@@ -146,8 +156,8 @@ class RemoteBuildoutHelper(object):
         self.logecho.start()
         code, stdout = self.remote.execute(' && '.join(commands))
         self.logecho.stop()
-        circus_installed = self.remote.file_exists('{}/config/circus.ini'.format(self.folder))
-        if not(code == 0 and circus_installed):
+        supervisor_installed = self.remote.file_exists('{}/parts/supervisor/supervisord.conf'.format(self.folder))
+        if not(code == 0 and supervisor_installed):
             raise StepError(error(stdout, 'Error on buildout execution'))
         return True
 
@@ -155,12 +165,15 @@ class RemoteBuildoutHelper(object):
         code, stdout = self.remote.execute('cd {0} && chown -R {1}:{1} .'.format(self.folder, uid), do_raise=True)
         return code == 0
 
-    def commit_to_local_branch(self, git_branch_name):
+    def commit_to_local_branch(self, git_branch_name, files=[]):
         code, stdout = self.remote.execute('cd {} && git checkout -b {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder,
             git_branch_name),
             do_raise=True
         )
+        success = self.add(files)
+        if not success:
+            raise StepError('Error adding Files')
 
         success = self.current_branch == git_branch_name
         if success:
@@ -268,7 +281,7 @@ class RemoteBuildoutHelper(object):
     @property
     def config_files(self):
         if not self._remote_config_files:
-            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root), do_raise=True)
+            code, stdout = self.remote.execute('cd {} && find . -wholename "./*/config/*.ini" | tar cv -O -T -'.format(self.config.instances_root))
             if stdout:
                 tar = tarfile.open(mode="r:", fileobj=StringIO(stdout))
                 for taredfile in tar.members:

@@ -45,7 +45,8 @@ setup(name='gummanager.libs',
           'maxclient',
           'utalk-python-client',
           'gevent',
-          'xlrd'
+          'xlrd',
+          'maxutils'
       ],
       entry_points="""
       # -*- Entry points: -*-

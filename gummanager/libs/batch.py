@@ -82,7 +82,7 @@ def read_xls(xlsfile, required_fields=[]):
 def read_csv(csvfile, required_fields=[]):
     content = open(csvfile).read()
     lines = content.split('\n')
-    return [line.split(',') for line in lines]
+    return lines
 
 
 def normalize_cols(row):

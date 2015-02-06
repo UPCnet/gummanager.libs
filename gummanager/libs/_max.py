@@ -26,9 +26,10 @@ from gummanager.libs.utils import step_log
 from gummanager.libs.utils import success_log, StepError, success
 from time import sleep
 
+from maxutils.mongodb import get_connection, get_database
+
 from collections import namedtuple
 import gevent
-import pymongo
 import requests
 import re
 
@@ -338,10 +339,9 @@ class MaxServer(object):
     def configure_instance(self):
 
         customizations = {
-            'hosts': {
-                'main': self.config.server_dns,
-                'rabbitmq': self.config.rabbitmq_server,
-                'mongodb_cluster': self.config.mongodb_cluster
+            'mongodb-config': {
+                'replica_set': self.config.replica_set,
+                'cluster_hosts': self.config.mongodb_cluster
             },
             'max-config': {
                 'name': self.instance.name,
@@ -349,15 +349,22 @@ class MaxServer(object):
             'ports': {
                 'port_index': '{:0>2}'.format(self.instance.index),
             },
-            'urls': {
-                'oauth': 'https://{}/{}'.format(self.config.default_oauth_server_dns, self.instance.oauth),
-                'rabbit': 'amqp://{rabbitmq_username}:{rabbitmq_password}@{server}:{port}/%2F'.format(**self.config.utalk)
-            }
 
         }
 
         self.buildout.configure_file('customizeme.cfg', customizations),
         return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
+
+    def configure_mongoauth(self):
+
+        customizations = {
+            'mongo-auth': {
+                'password': self.config.mongodb_password,
+            },
+        }
+
+        self.buildout.configure_file('mongoauth.cfg', customizations),
+        return success_log('Succesfully configured {}/mongoauth.cfg'.format(self.buildout.folder))
 
     def execute_buildout(self, update=False):
         self.buildout.execute(update=update)
@@ -393,10 +400,10 @@ class MaxServer(object):
             default_security = {'roles': {"Manager": users}}
             hosts = self.config.mongodb_cluster
             replica_set = maxconfig['app:main']['mongodb.replica_set']
-            conn = pymongo.MongoReplicaSetClient(hosts, replicaSet=replica_set)
-
+            conn = get_connection(hosts, replica_set)
             db_name = maxconfig['app:main']['mongodb.db_name']
-            db = conn[db_name]
+            password = self.config.mongodb_password
+            db = get_database(conn, db_name, username='admin', password=password, authdb='admin')
 
             if not [items for items in db.security.find({})]:
                 db.security.insert(default_security)
@@ -447,7 +454,12 @@ class MaxServer(object):
         return success_log("Succesfully created {}".format(init_d_script_location))
 
     def commit_local_changes(self):
-        self.buildout.commit_to_local_branch(self.config.local_git_branch)
+        self.buildout.commit_to_local_branch(
+            self.config.local_git_branch,
+            files=[
+                'customizeme.cfg',
+                'mongoauth.cfg'
+            ])
         return success_log("Succesfully commited local changes")
 
     def set_filesystem_permissions(self):
@@ -520,6 +532,9 @@ class MaxServer(object):
             yield step_log('Configuring customizeme.cfg')
             yield self.configure_instance()
 
+            yield step_log('Configuring mongoauth.cfg')
+            yield self.configure_mongoauth()
+
             yield step_log('Executing buildout')
             yield self.execute_buildout()
 
@@ -532,14 +547,14 @@ class MaxServer(object):
             yield step_log('Creating nginx entry for max')
             yield self.create_max_nginx_entry()
 
-            yield step_log('Creating nginx entry for circus')
-            yield self.create_circus_nginx_entry()
+#            yield step_log('Creating nginx entry for circus')
+#            yield self.create_circus_nginx_entry()
 
-            yield step_log('Creating init.d script')
-            yield self.create_startup_script()
+#            yield step_log('Creating init.d script')
+#            yield self.create_startup_script()
 
-            yield step_log('Commiting to local branch')
-            yield self.commit_local_changes()
+#            yield step_log('Commiting to local branch')
+#            yield self.commit_local_changes()
 
             yield step_log('Changing permissions')
             yield self.set_filesystem_permissions()
