@@ -47,6 +47,8 @@ class UlearnSite(Plone, TokenHelper):
                 # If no json colud be decoded, 99.99% that is the unauthorized Plone view
                 # but it could be a crash
                 return {'error': True, 'message': 'Unauthorized or server error'}
+        else:
+            return {'error': True, 'message': 'Server Error'}
         return response.json()
 
     def subscribe_users(self, **users):
