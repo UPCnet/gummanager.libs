@@ -8,6 +8,9 @@ import humanize
 import re
 from blessings import Terminal
 
+# import to connect through xmlrpc with supervisor
+import xmlrpclib
+
 term = Terminal()
 DEBUG_MODE = True
 
@@ -223,6 +226,25 @@ def circus_status(endpoint=None, process=None):
             if'TIMED OUT' in exc.message.upper():
                 # circus stopped
                 default['status'] = 'unknown'
+    return default
+
+instance['supervisor_xmlrpc'],instance_name
+def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
+    if supervisor_xmlrpc and instance_name:
+        try:
+            supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
+            try:
+                statuses_list = [{'statename': i['statename'] , 'name': i['name'] } for i in server.supervisor.getAllProcessInfo() if i['name'] == instance_name]
+                default ['status']=statuses_list[0]['statename']
+                default ['instance_name'] = statuses_list[0]['name']
+            except:
+                print "supervisor contacted but instance status not retrieved"
+        except Exception as exc:
+            print  "Can't contact to supervisor"
+            default['status']="Can't contact to supervisor"
+    else:
+        default = {'status': '', 'instance_name': instance_name}
+        
     return default
 
 

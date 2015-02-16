@@ -102,18 +102,15 @@ class OauthServer(object):
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
-        status = circus_status(
-            endpoint=instance['circus_tcp'],
-            process='osiris'
-        )
-
+        status = supervisor_status(instance['supervisor_xmlrpc'],instance_name)
         result_status = OrderedDict()
-        result_status['name'] = instance_name
-        result_status['server'] = instance['server']
+        result_status['name'] = status['instance_name']
+        result_status['server'] = 'del_me'
         result_status['status'] = status['status']
-        result_status['pid'] = status['pid']
-        result_status['uptime'] = status['uptime']
+        result_status['pid'] = 'del_me'
+        result_status['uptime'] = 'del_me'
         return result_status
+
 
     def get_instance(self, instance_name):
         osiris_ini = self.buildout.config_files[instance_name].get('osiris.ini', '')
@@ -143,6 +140,7 @@ class OauthServer(object):
         }
         instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
         instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
+        instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(self.config.supervisor_password,self.config.server,self.config.supervisor_port )
 
         return instance
 
