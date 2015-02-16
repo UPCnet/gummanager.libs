@@ -228,7 +228,8 @@ def circus_status(endpoint=None, process=None):
                 default['status'] = 'unknown'
     return default
 
-def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
+
+def supervisor_process_status(supervisor_xmlrpc=None,instance_name=None):
     default = {
         'pid': 'unknown',
         'status': 'unknown',
@@ -248,10 +249,30 @@ def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
             except:
                 default['status'] = "supervisor contacted but instance status not retrieved"
         except Exception as exc:
-            default['status']="Can't contact to supervisor"
+            default['status']="'unknown'"
 
         
     return default
+
+
+def supervisor_process_start(supervisor_xmlrpc=None,instance_name=None):
+    if supervisor_xmlrpc and instance_name:
+        try:
+            supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
+            osiris_name = 'osiris_' + instance_name
+            supervisor_server.supervisor.startProcess(osiris_name)
+        except:
+            pass
+
+
+def supervisor_process_stop(supervisor_xmlrpc=None,instance_name=None):
+    if supervisor_xmlrpc and instance_name:
+        try:
+            supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
+            osiris_name = 'osiris_' + instance_name
+            supervisor_server.supervisor.stopProcess(osiris_name)
+        except:
+            pass
 
 
 def admin_password_for_branch(branch_name):
