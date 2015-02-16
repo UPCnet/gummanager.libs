@@ -107,8 +107,8 @@ class OauthServer(object):
         result_status['name'] = instance_name
         result_status['server'] = 'del_me'
         result_status['status'] = status['status']
-        result_status['pid'] = 'del_me'
-        result_status['uptime'] = 'del_me'
+        result_status['pid'] = status['pid']
+        result_status['uptime'] = status['uptime']
         return result_status
 
 

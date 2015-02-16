@@ -240,15 +240,16 @@ def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
             supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
             try:
                 osiris_name = 'osiris_' + instance_name
-                statuses_list = [{'statename': i['statename'] , 'name': i['name'] } for i in supervisor_server.supervisor.getAllProcessInfo() if i['name'] == osiris_name]
-                default ['status']=statuses_list[0]['statename']
-                default ['instance_name'] = statuses_list[0]['name']
+                process_info = supervisor_server.supervisor.getProcessInfo(osiris_name)
+                default['status'] = process_info['statename']
+                default['pid'] = process_info['pid']
+                default['uptime'] = process_info['description']
+
             except:
                 default['status'] = "supervisor contacted but instance status not retrieved"
         except Exception as exc:
             default['status']="Can't contact to supervisor"
-    else:
-        default = {'status': '', 'instance_name': instance_name}
+
         
     return default
 
