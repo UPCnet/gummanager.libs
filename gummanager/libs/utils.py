@@ -229,6 +229,12 @@ def circus_status(endpoint=None, process=None):
     return default
 
 def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
+    default = {
+        'pid': 'unknown',
+        'status': 'unknown',
+        'uptime': 'unknown'
+    }
+    
     if supervisor_xmlrpc and instance_name:
         try:
             supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)

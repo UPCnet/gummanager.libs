@@ -1,7 +1,7 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
-from gummanager.libs.utils import circus_status, circus_control
+from gummanager.libs.utils import circus_status, circus_control, supervisor_status
 from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
 from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
 from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
@@ -104,7 +104,8 @@ class OauthServer(object):
         instance = self.get_instance(instance_name)
         status = supervisor_status(instance['supervisor_xmlrpc'],instance_name)
         result_status = OrderedDict()
-        result_status['name'] = status['instance_name']
+        import pdb; pdb.set_trace()
+        result_status['name'] = instance_name
         result_status['server'] = 'del_me'
         result_status['status'] = status['status']
         result_status['pid'] = 'del_me'
@@ -133,6 +134,7 @@ class OauthServer(object):
             'direct': 'http://{}:{}'.format(self.config.server, osiris['server:main']['port']),
             'dns': 'https://{}/{}'.format(self.config.server_dns, instance_name)
         }
+        print 
         instance['ldap'] = {
             'server': ldap['ldap']['server'],
             'basedn': ldap['ldap']['userbasedn'],
