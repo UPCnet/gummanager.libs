@@ -234,12 +234,13 @@ def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
         'status': 'unknown',
         'uptime': 'unknown'
     }
-    
+
     if supervisor_xmlrpc and instance_name:
         try:
             supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
             try:
-                statuses_list = [{'statename': i['statename'] , 'name': i['name'] } for i in server.supervisor.getAllProcessInfo() if i['name'] == instance_name]
+                osiris_name = 'osiris_' + instance_name
+                statuses_list = [{'statename': i['statename'] , 'name': i['name'] } for i in supervisor_server.supervisor.getAllProcessInfo() if i['name'] == osiris_name]
                 default ['status']=statuses_list[0]['statename']
                 default ['instance_name'] = statuses_list[0]['name']
             except:

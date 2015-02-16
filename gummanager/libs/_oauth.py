@@ -104,7 +104,6 @@ class OauthServer(object):
         instance = self.get_instance(instance_name)
         status = supervisor_status(instance['supervisor_xmlrpc'],instance_name)
         result_status = OrderedDict()
-        import pdb; pdb.set_trace()
         result_status['name'] = instance_name
         result_status['server'] = 'del_me'
         result_status['status'] = status['status']
