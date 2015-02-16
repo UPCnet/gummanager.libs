@@ -228,7 +228,6 @@ def circus_status(endpoint=None, process=None):
                 default['status'] = 'unknown'
     return default
 
-instance['supervisor_xmlrpc'],instance_name
 def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
     if supervisor_xmlrpc and instance_name:
         try:
@@ -238,9 +237,8 @@ def supervisor_status(supervisor_xmlrpc=None,instance_name=None):
                 default ['status']=statuses_list[0]['statename']
                 default ['instance_name'] = statuses_list[0]['name']
             except:
-                print "supervisor contacted but instance status not retrieved"
+                default['status'] = "supervisor contacted but instance status not retrieved"
         except Exception as exc:
-            print  "Can't contact to supervisor"
             default['status']="Can't contact to supervisor"
     else:
         default = {'status': '', 'instance_name': instance_name}
