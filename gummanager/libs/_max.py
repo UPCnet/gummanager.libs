@@ -563,35 +563,35 @@ class MaxServer(object):
             oauth=oauth_instance if oauth_instance is not None else instance_name,
         )
         try:
-            # yield step_log('Cloning buildout')
-            # yield self.clone_buildout()
+            yield step_log('Cloning buildout')
+            yield self.clone_buildout()
 
-            # yield step_log('Bootstraping buildout')
-            # yield self.bootstrap_buildout()
+            yield step_log('Bootstraping buildout')
+            yield self.bootstrap_buildout()
 
-            # yield step_log('Configuring customizeme.cfg')
-            # yield self.configure_instance()
+            yield step_log('Configuring customizeme.cfg')
+            yield self.configure_instance()
 
-            # yield step_log('Configuring mongoauth.cfg')
-            # yield self.configure_mongoauth()
+            yield step_log('Configuring mongoauth.cfg')
+            yield self.configure_mongoauth()
 
-            # yield step_log('Executing buildout')
-            # yield self.execute_buildout()
+            yield step_log('Executing buildout')
+            yield self.execute_buildout()
 
-            # yield step_log('Adding indexes to mongodb')
-            # yield self.set_mongodb_indexes()
+            yield step_log('Adding indexes to mongodb')
+            yield self.set_mongodb_indexes()
 
-            # yield step_log('Configuring default permissions settings')
-            # yield self.configure_max_security_settings()
+            yield step_log('Configuring default permissions settings')
+            yield self.configure_max_security_settings()
 
-            # yield step_log('Creating nginx entry for max')
-            # yield self.create_max_nginx_entry()
+            yield step_log('Creating nginx entry for max')
+            yield self.create_max_nginx_entry()
 
-            # yield step_log('Commiting to local branch')
-            # yield self.commit_local_changes()
+            yield step_log('Commiting to local branch')
+            yield self.commit_local_changes()
 
-            # yield step_log('Changing permissions')
-            # yield self.set_filesystem_permissions()
+            yield step_log('Changing permissions')
+            yield self.set_filesystem_permissions()
 
             yield step_log('Adding instance to supervisor config')
             yield self.configure_supervisor()
