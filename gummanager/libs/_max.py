@@ -23,6 +23,7 @@ from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import step_log
+from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import success_log, StepError, success
 from time import sleep
 
@@ -44,6 +45,9 @@ class MaxServer(object):
         self.instance = None
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
+
+        if not self.remote.file_exists(self.config.instances_root):
+            self.remote.mkdir(self.config.instances_root)
 
     def get_client(self, instance_name, username='', password=''):
         instance_info = self.get_instance(instance_name)
@@ -349,7 +353,16 @@ class MaxServer(object):
             'ports': {
                 'port_index': '{:0>2}'.format(self.instance.index),
             },
+            'rabbitmq-config': {
+                'username': self.config.utalk.rabbitmq_admin,
+                'password': self.config.utalk.rabbitmq_password
+            },
+            'hosts': {
+                'max': self.config.server_dns,
+                'oauth': self.config.default_oauth_server_dns,
+                'rabbitmq': self.config.utalk.server
 
+            }
         }
 
         self.buildout.configure_file('customizeme.cfg', customizations),
@@ -375,7 +388,7 @@ class MaxServer(object):
             self.config.instances_root,
             self.instance.name
         )
-        code, stdout = self.remote.execute('{0}/bin/max.mongoindexes -c {0}/config/max.ini -i {0}/config/mongodb.indexes'.format(new_instance_folder))
+        code, stdout = self.remote.execute('cd {0} && ./bin/max.mongoindexes'.format(new_instance_folder))
         added = 'Added' in stdout
 
         if added:
@@ -453,6 +466,33 @@ class MaxServer(object):
 
         return success_log("Succesfully created {}".format(init_d_script_location))
 
+    def configure_supervisor(self):
+        new_instance_folder = '{}/{}'.format(
+            self.config.instances_root,
+            self.instance.name
+        )
+
+        settings = {
+            'supervisor': {'parts': [new_instance_folder]}
+        }
+
+        remote_file = "{}/customizeme.cfg".format(self.config.supervisor.path)
+        customizeme = configure_ini(
+            string=self.remote.get_file(remote_file),
+            append=True,
+            params=settings)
+
+        successfull = self.remote.put_file("{}/{}".format(self.config.supervisor.path, 'customizeme.cfg'), customizeme)
+        if not successfull:
+            raise StepError('Error when configuring {}'.format(remote_file))
+
+        code, stdout = self.remote.execute('cd {} && ./supervisor_config'.format(self.config.supervisor.path), do_raise=True)
+
+        return success(
+            stdout,
+            "Succesfully added {} to supervisor".format(new_instance_folder)
+        )
+
     def commit_local_changes(self):
         self.buildout.commit_to_local_branch(
             self.config.local_git_branch,
@@ -523,41 +563,38 @@ class MaxServer(object):
             oauth=oauth_instance if oauth_instance is not None else instance_name,
         )
         try:
-            yield step_log('Cloning buildout')
-            yield self.clone_buildout()
+            # yield step_log('Cloning buildout')
+            # yield self.clone_buildout()
 
-            yield step_log('Bootstraping buildout')
-            yield self.bootstrap_buildout()
+            # yield step_log('Bootstraping buildout')
+            # yield self.bootstrap_buildout()
 
-            yield step_log('Configuring customizeme.cfg')
-            yield self.configure_instance()
+            # yield step_log('Configuring customizeme.cfg')
+            # yield self.configure_instance()
 
-            yield step_log('Configuring mongoauth.cfg')
-            yield self.configure_mongoauth()
+            # yield step_log('Configuring mongoauth.cfg')
+            # yield self.configure_mongoauth()
 
-            yield step_log('Executing buildout')
-            yield self.execute_buildout()
+            # yield step_log('Executing buildout')
+            # yield self.execute_buildout()
 
-            yield step_log('Adding indexes to mongodb')
-            yield self.set_mongodb_indexes()
+            # yield step_log('Adding indexes to mongodb')
+            # yield self.set_mongodb_indexes()
 
-            yield step_log('Configuring default permissions settings')
-            yield self.configure_max_security_settings()
+            # yield step_log('Configuring default permissions settings')
+            # yield self.configure_max_security_settings()
 
-            yield step_log('Creating nginx entry for max')
-            yield self.create_max_nginx_entry()
+            # yield step_log('Creating nginx entry for max')
+            # yield self.create_max_nginx_entry()
 
-#            yield step_log('Creating nginx entry for circus')
-#            yield self.create_circus_nginx_entry()
+            # yield step_log('Commiting to local branch')
+            # yield self.commit_local_changes()
 
-#            yield step_log('Creating init.d script')
-#            yield self.create_startup_script()
+            # yield step_log('Changing permissions')
+            # yield self.set_filesystem_permissions()
 
-#            yield step_log('Commiting to local branch')
-#            yield self.commit_local_changes()
-
-            yield step_log('Changing permissions')
-            yield self.set_filesystem_permissions()
+            yield step_log('Adding instance to supervisor config')
+            yield self.configure_supervisor()
 
             yield step_log('Adding instance to bigmax')
             yield self.add_instance_to_bigmax()

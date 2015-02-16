@@ -27,6 +27,9 @@ class OauthServer(object):
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
+        if not self.remote.file_exists(self.config.instances_root):
+            self.remote.mkdir(self.config.instances_root)
+
     def get_instances(self):
         instances = []
         for instance_name in self.buildout.config_files:

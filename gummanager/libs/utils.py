@@ -73,6 +73,10 @@ class RemoteConnection(object):
 
         return result.exit_code, result.stdout
 
+    def mkdir(self, folder, **kwargs):
+        code, stdout = self.execute('mkdir {}'.format(folder), **kwargs)
+        return code == 0
+
     def file_exists(self, filename, **kwargs):
         code, stdout = self.execute('ls {}'.format(filename), **kwargs)
         return code == 0
@@ -152,23 +156,38 @@ def parse_ini_from(string=None, filename=None, url=None, params={}):
     elif string is not None:
         text = string
 
+    multilines = re.findall(r'([^=] +[^\n=]+)(?=\n)', text, re.MULTILINE)
+    for multiline in multilines:
+        text = text.replace(multiline, ' ' + multiline.lstrip())
+
     input_config = StringIO(text)
     return ConfigObj(input_config, encoding="utf-8", list_values=False)
 
 
-def configure_ini(string=None, filename=None, url=None, params={}):
+def configure_ini(string=None, filename=None, url=None, params={}, append=False):
 
     config = parse_ini_from(string=string, filename=filename, url=url, params=params)
     for section_name, section_items in params.items():
         section = config[section_name]
+
         for element_name, value in section_items.items():
+            if isinstance(value, list):
+                separator = '\n' + ' ' * (len(element_name) + 3)
+                if append and element_name in section:
+                    existing = [a.strip() for a in section[element_name].split(' ')]
+                    value = existing + value
+                value = separator.join(list(set(value)))
             section[element_name] = value
 
     out = StringIO()
     config.default_encoding = 'utf-8'
     config.write(out)
     out.seek(0)
-    return out.read().replace('"', '')
+
+    text = out.read()
+    text = text.replace('""', '')
+    text = text.replace("'''", '')
+    return text
 
 
 def circus_control(action, endpoint=None, process=None):
