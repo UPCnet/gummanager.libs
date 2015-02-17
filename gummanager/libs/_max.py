@@ -254,13 +254,13 @@ class MaxServer(ProcessHelper, object):
                 'port_index': '{:0>2}'.format(self.instance.index),
             },
             'rabbitmq-config': {
-                'username': self.config.utalk.rabbitmq_admin,
-                'password': self.config.utalk.rabbitmq_password
+                'username': self.config.rabbitmq.admin,
+                'password': self.config.rabbitmq.password
             },
             'hosts': {
                 'max': self.config.server_dns,
                 'oauth': self.config.default_oauth_server_dns,
-                'rabbitmq': self.config.utalk.server
+                'rabbitmq': self.config.rabbitmq.server
 
             }
         }
