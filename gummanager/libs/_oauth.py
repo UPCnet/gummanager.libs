@@ -1,10 +1,10 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
-from gummanager.libs.utils import supervisor_process_status, supervisor_process_start, supervisor_process_stop
 from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
+from gummanager.libs.mixins import ProcessHelper
 
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
@@ -15,11 +15,13 @@ from time import sleep
 import re
 
 
-class OauthServer(object):
+class OauthServer(ProcessHelper, object):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
 
+        self._instances = {}
+        self.process_prefix = 'osiris_'
         self.remote = RemoteConnection(self.config.ssh_user, self.config.server)
         self.buildout = RemoteBuildoutHelper(self.remote, self.config.python_interpreter, self)
 
@@ -54,50 +56,6 @@ class OauthServer(object):
         else:
             padded_error('Error reloading nginx')
             return None
-
-    def start(self, instance_name):
-        progress_log('Starting instance')
-        status = self.get_status(instance_name)
-        instance = self.get_instance(instance_name)
-        if status['status'] == 'unknown':
-            padded_log('supervisor stopped ...')
-
-        elif status['status'].lower() == 'stopped':
-            padded_log('Osiris stopped, starting process ...')
-            supervisor_process_start(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-
-        padded_log('Waiting for osiris to start...')
-        sleep(1)
-
-        status = self.get_status(instance_name)
-        if status['status'].lower() == 'running':
-            padded_success('Oauth instance {} started'.format(instance_name))
-        else:
-            padded_error('Oauth instance {} not started'.format(instance_name))
-
-    def stop(self, instance_name):
-        progress_log('Stopping instance')
-        instance = self.get_instance(instance_name)
-        supervisor_process_stop(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-
-        padded_log('Waiting for osiris to stop...')
-        sleep(1)
-        status = self.get_status(instance_name)
-        if status['status'].lower() == 'stopped':
-            padded_success('Osiris OAuth instance {} stopped'.format(instance_name))
-        else:
-            padded_error('Osiris OAuth instance {} still active'.format(instance_name))
-
-    def get_status(self, instance_name):
-        instance = self.get_instance(instance_name)
-        status = supervisor_process_status(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-        result_status = OrderedDict()
-        result_status['name'] = instance_name
-        result_status['server'] = 'del_me'
-        result_status['status'] = status['status']
-        result_status['pid'] = status['pid']
-        result_status['uptime'] = status['uptime']
-        return result_status
 
     def get_instance(self, instance_name):
         if instance_name not in self._instances:

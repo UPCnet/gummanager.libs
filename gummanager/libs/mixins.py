@@ -1,6 +1,15 @@
 import requests
 import json
 
+from gummanager.libs.supervisor import SupervisorControl
+from gummanager.libs.utils import progress_log
+from gummanager.libs.utils import padded_error
+from gummanager.libs.utils import padded_log
+from gummanager.libs.utils import padded_success
+
+from time import sleep
+from collections import OrderedDict
+
 
 class TokenHelper(object):
 
@@ -34,3 +43,71 @@ class TokenHelper(object):
             'X-Oauth-Scope': "widgetcli"
         }
         return headers
+
+
+class ProcessHelper(object):
+    """
+        Methods related to starting, stopping and loading
+        supervisor processes. Also does nginx reloading
+    """
+
+    def process_name(self, instance_name):
+        return self.process_prefix + instance_name
+
+    def get_status(self, instance_name):
+        instance = self.get_instance(instance_name)
+        process_name = self.process_name(instance_name)
+        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+
+        status = supervisor.status(process_name)
+        result_status = OrderedDict()
+        result_status['name'] = instance_name
+        result_status['server'] = 'http://{}:{}'.format(self.config.server, self.config.supervisor.port)
+        result_status['status'] = status['status']
+        result_status['pid'] = status['pid']
+        result_status['uptime'] = status['uptime']
+        return result_status
+
+    def start(self, instance_name):
+        progress_log('Starting instance')
+        status = self.get_status(instance_name)
+        instance = self.get_instance(instance_name)
+
+        process_name = self.process_name(instance_name)
+        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+
+        if status['status'] == 'unknown':
+            padded_log('Unknown {} status ...')
+        elif status['status'] == 'not found':
+            supervisor.load(process_name)
+        else:
+            padded_log('Process stopped, starting ...')
+            supervisor.start(process_name)
+
+        padded_log('Waiting for process "{}" to start...'.format(process_name))
+        sleep(1)
+
+        status = self.get_status(instance_name)
+        if status['status'].lower() == 'running':
+            padded_success('Process "{}" started'.format(process_name))
+        elif status['status'].lower() in ['fatal', 'backoff']:
+            padded_error('Process "{}" not started, an error occurred'.format(process_name))
+        else:
+            padded_error('Process "{}" not started'.format(process_name))
+
+    def stop(self, instance_name):
+        progress_log('Stopping instance')
+        instance = self.get_instance(instance_name)
+
+        process_name = self.process_name(instance_name)
+        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+
+        supervisor.stop(process_name)
+
+        padded_log('Waiting for "{}" instance to stop...'.format(instance_name))
+        sleep(1)
+        status = self.get_status(instance_name)
+        if status['status'].lower() == 'stopped':
+            padded_success('Instance "{}" stopped'.format(instance_name))
+        else:
+            padded_error('Instance "{}" still active'.format(instance_name))

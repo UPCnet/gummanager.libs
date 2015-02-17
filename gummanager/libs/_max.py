@@ -19,7 +19,7 @@ from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import step_log
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import success_log, StepError, success
-from gummanager.libs.utils import supervisor_process_status, supervisor_process_start, supervisor_process_stop, supervisor_process_load
+from gummanager.libs.mixins import ProcessHelper
 from time import sleep
 
 from maxutils.mongodb import get_connection, get_database
@@ -30,11 +30,12 @@ import requests
 import re
 
 
-class MaxServer(object):
+class MaxServer(ProcessHelper, object):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
 
+        self.process_prefix = 'max_'
         self._client = None
         self._instances = {}
         self.instance = None
@@ -133,73 +134,6 @@ class MaxServer(object):
             yield self.reload_nginx()
         except StepError as error:
             yield error_log(error.message)
-
-    def start(self, instance_name):
-        progress_log('Starting instance')
-        status = self.get_status(instance_name)
-        instance = self.get_instance(instance_name)
-        if status['status'] == 'unknown':
-            padded_log('Unknown {} status ...')
-        elif status['status'] == 'not found':
-            supervisor_process_load(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-        elif status['status'] == 'stopped':
-            padded_log('Max stopped, starting process ...')
-            supervisor_process_start(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-
-        padded_log('Waiting for max to start...')
-        sleep(1)
-
-        status = self.get_status(instance_name)
-        if status['status'].lower() == 'running':
-            padded_success('Max instance {} started'.format(instance_name))
-        else:
-            padded_error('Max instance {} not started'.format(instance_name))
-
-    def stop(self, instance_name):
-        progress_log('Stopping instance')
-        instance = self.get_instance(instance_name)
-        process_name = 'max_' + instance_name
-        supervisor_process_stop(instance['supervisor_xmlrpc'], process_name)
-
-        padded_log('Waiting for "{}" instance to stop...'.format(instance_name))
-        sleep(1)
-        status = self.get_status(instance_name)
-        if status['status'].lower() == 'stopped':
-            padded_success('Instance {} stopped'.format(instance_name))
-        else:
-            padded_error('Instance {} still active'.format(instance_name))
-
-    def reload(self, instance_name, process_name):
-        # status = self.get_status(instance_name)
-        # instance = self.get_instance(instance_name)
-
-        # if status['status'][process_name] == 'unknown':
-        #     code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
-
-        # elif status['status'][process_name] == 'stopped':
-        #     circus_control(
-        #         'start',
-        #         endpoint=instance['circus_tcp'],
-        #         process=process_name
-        #     )
-        # elif status['status'][process_name] == 'running':
-        #     circus_control(
-        #         'reload',
-        #         endpoint=instance['circus_tcp'],
-        #         process=process_name
-        #     )
-        pass
-
-    def get_status(self, instance_name):
-        instance = self.get_instance(instance_name)
-        status = supervisor_process_status(instance['supervisor_xmlrpc'], 'max_' + instance_name)
-        result_status = OrderedDict()
-        result_status['name'] = instance_name
-        result_status['server'] = 'del_me'
-        result_status['status'] = status['status']
-        result_status['pid'] = status['pid']
-        result_status['uptime'] = status['uptime']
-        return result_status
 
     def test_activity(self, instance_name, ldap_branch):
 
