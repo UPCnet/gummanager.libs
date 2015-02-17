@@ -253,7 +253,7 @@ class MaxServer(ProcessHelper, object):
                 'port_index': '{:0>2}'.format(self.instance.index),
             },
             'rabbitmq-config': {
-                'username': self.config.rabbitmq.admin,
+                'username': self.config.rabbitmq.username,
                 'password': self.config.rabbitmq.password
             },
             'hosts': {
