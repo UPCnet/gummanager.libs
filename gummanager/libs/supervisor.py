@@ -2,6 +2,9 @@ import xmlrpclib
 from gummanager.libs.utils import padded_log, padded_error
 from socket import error as SocketError
 
+import humanize
+import datetime
+
 
 def check_supervisor(func):
     def inner(self, instance_name):
@@ -38,7 +41,7 @@ class SupervisorControl(object):
         else:
             default['status'] = process_info['statename'].lower()
             default['pid'] = process_info['pid']
-            default['uptime'] = process_info['description']
+            default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.datetime.fromtimestamp(process_info['now']))
 
         return default
 
