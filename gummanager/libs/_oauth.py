@@ -7,7 +7,6 @@ from gummanager.libs.buildout import RemoteBuildoutHelper
 from gummanager.libs.mixins import ProcessHelper
 
 from gummanager.libs.config_files import LDAP_INI
-from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
 from collections import OrderedDict, namedtuple
@@ -172,21 +171,6 @@ class OauthServer(ProcessHelper, object):
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def create_startup_script(self):
-        initd_params = {
-            'instance_folder': self.buildout.folder
-        }
-        initd_script = INIT_D_SCRIPT.format(**initd_params)
-
-        init_d_script_name = "oauth_{}".format(self.instance.name)
-        init_d_script_location = "/etc/init.d/{}".format(init_d_script_name)
-
-        self.remote.put_file(init_d_script_location, initd_script)
-        self.remote.execute("chmod +x {}".format(init_d_script_location), do_raise=True)
-        self.remote.execute("update-rc.d {} defaults".format(init_d_script_name), do_raise=True)
-
-        return success_log("Succesfully created /etc/init.d/max_{}".format(self.instance.name))
-
     def execute_buildout(self):
         self.buildout.execute()
         return success_log("Succesfully created a new oauth instance")
@@ -261,9 +245,6 @@ class OauthServer(ProcessHelper, object):
 
             yield step_log('Creating nginx entry for oauth')
             yield self.create_max_nginx_entry()
-
-            yield step_log('Creating init.d script')
-            yield self.create_startup_script()
 
             yield step_log('Executing buildout')
             yield self.execute_buildout()

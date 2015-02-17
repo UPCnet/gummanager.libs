@@ -3,7 +3,6 @@ from maxclient.rest import MaxClient
 from collections import OrderedDict
 from gevent.event import AsyncResult
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
 from gummanager.libs.config_files import BIGMAX_INSTANCE_ENTRY
 from gummanager.libs.ports import BIGMAX_BASE_PORT
@@ -337,21 +336,6 @@ class MaxServer(ProcessHelper, object):
         nginx_file_location = "{}/config/max-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
-
-    def create_startup_script(self):
-        initd_params = {
-            'instance_folder': self.buildout.folder
-        }
-        initd_script = INIT_D_SCRIPT.format(**initd_params)
-
-        init_d_script_name = "max_{}".format(self.instance.name)
-        init_d_script_location = "/etc/init.d/{}".format(init_d_script_name)
-
-        self.remote.put_file(init_d_script_location, initd_script)
-        self.remote.execute("chmod +x {}".format(init_d_script_location), do_raise=True)
-        self.remote.execute("update-rc.d {} defaults".format(init_d_script_name), do_raise=True)
-
-        return success_log("Succesfully created {}".format(init_d_script_location))
 
     def configure_supervisor(self):
         new_instance_folder = '{}/{}'.format(
