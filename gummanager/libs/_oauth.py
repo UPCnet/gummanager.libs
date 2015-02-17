@@ -191,6 +191,33 @@ class OauthServer(ProcessHelper, object):
         self.buildout.execute()
         return success_log("Succesfully created a new oauth instance")
 
+    def configure_supervisor(self):
+        new_instance_folder = '{}/{}'.format(
+            self.config.instances_root,
+            self.instance.name
+        )
+
+        settings = {
+            'supervisor': {'parts': [new_instance_folder]}
+        }
+
+        remote_file = "{}/customizeme.cfg".format(self.config.supervisor.path)
+        customizeme = configure_ini(
+            string=self.remote.get_file(remote_file),
+            append=True,
+            params=settings)
+
+        successfull = self.remote.put_file("{}/{}".format(self.config.supervisor.path, 'customizeme.cfg'), customizeme)
+        if not successfull:
+            raise StepError('Error when configuring {}'.format(remote_file))
+
+        code, stdout = self.remote.execute('cd {} && ./supervisor_config'.format(self.config.supervisor.path), do_raise=True)
+
+        return success(
+            stdout,
+            "Succesfully added {} to supervisor".format(new_instance_folder)
+        )
+
     def commit_local_changes(self):
         self.buildout.commit_to_local_branch(
             self.config.local_git_branch,
@@ -235,11 +262,8 @@ class OauthServer(ProcessHelper, object):
             yield step_log('Creating nginx entry for oauth')
             yield self.create_max_nginx_entry()
 
-#            yield step_log('Creating nginx entry for circus')
-#            yield self.create_circus_nginx_entry()
-
-#            yield step_log('Creating init.d script')
-#            yield self.create_startup_script()
+            yield step_log('Creating init.d script')
+            yield self.create_startup_script()
 
             yield step_log('Executing buildout')
             yield self.execute_buildout()
@@ -249,6 +273,9 @@ class OauthServer(ProcessHelper, object):
 
             yield step_log('Changing permissions')
             yield self.set_filesystem_permissions()
+
+            yield step_log('Adding instance to supervisor config')
+            yield self.configure_supervisor()
 
         except StepError as error:
             yield error.message
