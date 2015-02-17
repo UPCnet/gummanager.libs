@@ -1,7 +1,7 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
-from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
+from gummanager.libs.utils import message_log
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
 from gummanager.libs.mixins import ProcessHelper
@@ -11,7 +11,6 @@ from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
 from collections import OrderedDict, namedtuple
-from time import sleep
 import re
 
 
@@ -39,23 +38,6 @@ class OauthServer(ProcessHelper, object):
     def set_instance(self, **kwargs):
         InstanceData = namedtuple('InstanceData', kwargs.keys())
         self.instance = InstanceData(**kwargs)
-
-    def reload_nginx_configuration(self):
-        progress_log('Reloading nginx configuration')
-        padded_log('Testing configuration')
-        code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
-        if code == 0 and 'done' in stdout:
-            padded_success('Configuration test passed')
-        else:
-            padded_error('Configuration test failed')
-            return None
-
-        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
-        if code == 0 and 'done' in stdout:
-            padded_success('Nginx reloaded succesfully')
-        else:
-            padded_error('Error reloading nginx')
-            return None
 
     def get_instance(self, instance_name):
         if instance_name not in self._instances:
@@ -111,6 +93,16 @@ class OauthServer(ProcessHelper, object):
         ports = [instance['port_index'] for instance in instances]
         ports.sort()
         return ports[-1] + 1 if ports else 1
+
+    def reload_nginx_configuration(self):
+        try:
+            yield step_log('Reloading nginx configuration')
+            yield message_log('Testing configuration')
+
+            yield self.test_nginx()
+            yield self.reload_nginx()
+        except StepError as error:
+            yield error_log(error.message)
 
     # Steps
 

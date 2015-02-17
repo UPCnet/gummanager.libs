@@ -6,6 +6,8 @@ from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import padded_error
 from gummanager.libs.utils import padded_log
 from gummanager.libs.utils import padded_success
+from gummanager.libs.utils import error_log
+from gummanager.libs.utils import success_log
 
 from time import sleep
 from collections import OrderedDict
@@ -111,3 +113,17 @@ class ProcessHelper(object):
             padded_success('Instance "{}" stopped'.format(instance_name))
         else:
             padded_error('Instance "{}" still active'.format(instance_name))
+
+    def test_nginx(self):
+        code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
+        if code == 0 and 'done' in stdout:
+            return success_log('Configuration test passed')
+        else:
+            return error_log('Configuration test failed')
+
+    def reload_nginx(self):
+        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
+        if code == 0 and 'done' in stdout:
+            return success_log('Nginx reloaded succesfully')
+        else:
+            return error_log('Error reloading nginx')

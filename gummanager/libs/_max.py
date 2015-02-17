@@ -111,20 +111,6 @@ class MaxServer(ProcessHelper, object):
                 instances.append(instance)
         return instances
 
-    def test_nginx(self):
-        code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
-        if code == 0 and 'done' in stdout:
-            return success_log('Configuration test passed')
-        else:
-            return error_log('Configuration test failed')
-
-    def reload_nginx(self):
-        code, stdout = self.remote.execute('/etc/init.d/nginx reload')
-        if code == 0 and 'done' in stdout:
-            return success_log('Nginx reloaded succesfully')
-        else:
-            return error_log('Error reloading nginx')
-
     def reload_nginx_configuration(self):
         try:
             yield step_log('Reloading nginx configuration')
