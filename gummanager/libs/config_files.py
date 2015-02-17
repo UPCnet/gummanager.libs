@@ -93,27 +93,7 @@ MAX_NGINX_ENTRY = """
         proxy_pass   http://{server_dns}:{max_port};
     }}
 """
-CIRCUS_NGINX_ENTRY = """
-  server {{
-   listen   {circus_nginx_port};
-   server_name  localhost;
 
-   location / {{
-
-     proxy_http_version 1.1;
-     proxy_set_header Upgrade $http_upgrade;
-     proxy_set_header Connection "upgrade";
-     proxy_set_header Host $host:$server_port;
-     proxy_set_header X-Real-IP $remote_addr;
-     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-     proxy_set_header X-Forwarded-Proto http;
-     proxy_set_header X-Forwarded-Host $host:$server_port;
-     proxy_pass http://localhost:{circus_httpd_endpoint};
-     auth_basic            "Restricted";
-     auth_basic_user_file  /var/nginx/config/circus.htpasswd;
-    }}
-  }}
-"""
 
 ULEARN_NGINX_ENTRY = """
     # MAX passthrough for legacy IE compat
@@ -156,15 +136,12 @@ ULEARN_NGINX_ENTRY = """
 """
 
 BIGMAX_INSTANCE_ENTRY = """[{instance_name}]
-max_server   = https://{server_dns}/{instance_name}
-stomp_server = https://{server_dns}/{instance_name}/stomp
-oauth_server = https://{oauth_dns}/{oauth_name}
+server   = https://{server_dns}/{instance_name}
 """
 
-MAXBUNNY_INSTANCE_ENTRY = """[max_{name}]
+MAXBUNNY_INSTANCE_ENTRY = """[{name}]
 hashtag = {hashtag}
 server = {server}
-oauth_server = {oauth_server}
 restricted_user = {restricted_user}
 restricted_user_token = {restricted_user_token}
 language = {language}

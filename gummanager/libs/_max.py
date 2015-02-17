@@ -481,9 +481,7 @@ class MaxServer(object):
             linebreak = '\n' if instances_file else ''
             instances_file += linebreak + BIGMAX_INSTANCE_ENTRY.format(**{
                 "server_dns": self.config.server_dns,
-                "oauth_dns": self.config.default_oauth_server_dns,
                 "instance_name": self.instance.name,
-                "oauth_name": self.instance.oauth,
             })
             self.remote.put_file(self.config.bigmax_instances_list, instances_file, do_raise=True)
         else:
