@@ -137,6 +137,8 @@ def padded_log(string, filters=[], print_stdout=True):
         matched_filter = re.search(r'({})'.format('|'.join(filters)), line)
         do_print = matched_filter or filters == []
         if do_print:
+            if not line.startswith('    '):
+                line = '    ' + line
             log.append(line.rstrip())
 
     loglines = '\n'.join(log)
@@ -220,7 +222,7 @@ def circus_status(endpoint=None, process=None):
             except:
                 # circus running but process stopped
                 pass
-            default['status'] = status['statuses'][process]
+            default['status'] = status['statuses'][process].lower()
 
         except Exception as exc:
             if'TIMED OUT' in exc.message.upper():
@@ -229,7 +231,7 @@ def circus_status(endpoint=None, process=None):
     return default
 
 
-def supervisor_process_status(supervisor_xmlrpc=None,instance_name=None):
+def supervisor_process_status(supervisor_xmlrpc=None, instance_name=None):
     default = {
         'pid': 'unknown',
         'status': 'unknown',
@@ -237,40 +239,49 @@ def supervisor_process_status(supervisor_xmlrpc=None,instance_name=None):
     }
 
     if supervisor_xmlrpc and instance_name:
+        supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
         try:
-            supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
-            try:
-                osiris_name = 'osiris_' + instance_name
-                process_info = supervisor_server.supervisor.getProcessInfo(osiris_name)
-                default['status'] = process_info['statename']
-                default['pid'] = process_info['pid']
-                default['uptime'] = process_info['description']
+            process_info = supervisor_server.supervisor.getProcessInfo(instance_name)
+        except xmlrpclib.Fault as exc:
+            if exc.faultCode == 10:
+                default['status'] = 'not found'
+        else:
+            default['status'] = process_info['statename'].lower()
+            default['pid'] = process_info['pid']
+            default['uptime'] = process_info['description']
 
-            except:
-                default['status'] = "supervisor contacted but instance status not retrieved"
-        except Exception as exc:
-            default['status']="'unknown'"
-
-        
     return default
 
 
-def supervisor_process_start(supervisor_xmlrpc=None,instance_name=None):
+def supervisor_process_start(supervisor_xmlrpc=None, instance_name=None):
     if supervisor_xmlrpc and instance_name:
         try:
             supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
-            osiris_name = 'osiris_' + instance_name
-            supervisor_server.supervisor.startProcess(osiris_name)
+            supervisor_server.supervisor.startProcess(instance_name)
         except:
             pass
 
 
-def supervisor_process_stop(supervisor_xmlrpc=None,instance_name=None):
+def supervisor_process_load(supervisor_xmlrpc=None, instance_name=None):
     if supervisor_xmlrpc and instance_name:
         try:
             supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
-            osiris_name = 'osiris_' + instance_name
-            supervisor_server.supervisor.stopProcess(osiris_name)
+            loaded = supervisor_server.supervisor.reloadConfig()
+            loaded_instances = loaded[0][0]
+            padded_log('New instances found: {}'.format(', '.join(loaded_instances)))
+            if instance_name in loaded_instances:
+                supervisor_server.supervisor.addProcessGroup(instance_name)
+            else:
+                padded_log('No instance named "{}" found after reloading configuration'.format())
+        except:
+            pass
+
+
+def supervisor_process_stop(supervisor_xmlrpc=None, instance_name=None):
+    if supervisor_xmlrpc and instance_name:
+        try:
+            supervisor_server = xmlrpclib.Server(supervisor_xmlrpc)
+            supervisor_server.supervisor.stopProcess(instance_name)
         except:
             pass
 

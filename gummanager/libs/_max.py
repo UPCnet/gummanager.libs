@@ -3,19 +3,13 @@ from maxclient.rest import MaxClient
 from collections import OrderedDict
 from gevent.event import AsyncResult
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import MAX_NGINX_ENTRY
 from gummanager.libs.config_files import BIGMAX_INSTANCE_ENTRY
 from gummanager.libs.ports import BIGMAX_BASE_PORT
-from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
-from gummanager.libs.ports import CIRCUS_NGINX_BASE_PORT
-from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import admin_password_for_branch
-from gummanager.libs.utils import circus_control
-from gummanager.libs.utils import circus_status
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import padded_error
 from gummanager.libs.utils import padded_log, message_log
@@ -25,6 +19,7 @@ from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import step_log
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import success_log, StepError, success
+from gummanager.libs.utils import supervisor_process_status, supervisor_process_start, supervisor_process_stop, supervisor_process_load
 from time import sleep
 
 from maxutils.mongodb import get_connection, get_database
@@ -82,8 +77,10 @@ class MaxServer(object):
                 'dns': maxconfig['app:main']['max.server']
             }
             instance['oauth'] = maxconfig['app:main']['max.oauth_server']
-            instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-            instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
+            instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(
+                self.config.supervisor.password,
+                self.config.server,
+                self.config.supervisor.port)
 
             self._instances[instance_name] = instance
         return self._instances[instance_name]
@@ -141,22 +138,19 @@ class MaxServer(object):
         progress_log('Starting instance')
         status = self.get_status(instance_name)
         instance = self.get_instance(instance_name)
+        if status['status'] == 'unknown':
+            padded_log('Unknown {} status ...')
+        elif status['status'] == 'not found':
+            supervisor_process_load(instance['supervisor_xmlrpc'], 'max_' + instance_name)
+        elif status['status'] == 'stopped':
+            padded_log('Max stopped, starting process ...')
+            supervisor_process_start(instance['supervisor_xmlrpc'], 'max_' + instance_name)
 
-        if status['status']['max'] == 'unknown':
-            padded_log('Circus stopped, starting circusd ...')
-            code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
-        elif status['status']['max'] == 'stopped':
-            padded_log('Osiris stopped, starting process ...')
-            circus_control(
-                'start',
-                endpoint=instance['circus_tcp'],
-                process='osiris'
-            )
-
-        padded_log('Waiting for circus...')
+        padded_log('Waiting for max to start...')
         sleep(1)
+
         status = self.get_status(instance_name)
-        if status['status']['max'] == 'active':
+        if status['status'].lower() == 'running':
             padded_success('Max instance {} started'.format(instance_name))
         else:
             padded_error('Max instance {} not started'.format(instance_name))
@@ -164,61 +158,47 @@ class MaxServer(object):
     def stop(self, instance_name):
         progress_log('Stopping instance')
         instance = self.get_instance(instance_name)
-        circus_control(
-            'stop',
-            endpoint=instance['circus_tcp'],
-            process='max'
-        )
+        process_name = 'max_' + instance_name
+        supervisor_process_stop(instance['supervisor_xmlrpc'], process_name)
 
-        padded_log('Waiting for circus to shutdown...')
+        padded_log('Waiting for "{}" instance to stop...'.format(instance_name))
         sleep(1)
         status = self.get_status(instance_name)
-        if status['status'] == 'stopped':
-            padded_success('Max instance {} stopped'.format(instance_name))
+        if status['status'].lower() == 'stopped':
+            padded_success('Instance {} stopped'.format(instance_name))
         else:
-            padded_error('Max instance {} still active'.format(instance_name))
+            padded_error('Instance {} still active'.format(instance_name))
 
     def reload(self, instance_name, process_name):
-        status = self.get_status(instance_name)
-        instance = self.get_instance(instance_name)
+        # status = self.get_status(instance_name)
+        # instance = self.get_instance(instance_name)
 
-        if status['status'][process_name] == 'unknown':
-            code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
+        # if status['status'][process_name] == 'unknown':
+        #     code, stdout = self.remote.execute('/etc/init.d/max_{} start'.format(instance_name))
 
-        elif status['status'][process_name] == 'stopped':
-            circus_control(
-                'start',
-                endpoint=instance['circus_tcp'],
-                process=process_name
-            )
-        elif status['status'][process_name] == 'active':
-            circus_control(
-                'reload',
-                endpoint=instance['circus_tcp'],
-                process=process_name
-            )
+        # elif status['status'][process_name] == 'stopped':
+        #     circus_control(
+        #         'start',
+        #         endpoint=instance['circus_tcp'],
+        #         process=process_name
+        #     )
+        # elif status['status'][process_name] == 'running':
+        #     circus_control(
+        #         'reload',
+        #         endpoint=instance['circus_tcp'],
+        #         process=process_name
+        #     )
+        pass
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
-        max_status = circus_status(
-            endpoint=instance['circus_tcp'],
-            process='max'
-        )
-
+        status = supervisor_process_status(instance['supervisor_xmlrpc'], 'max_' + instance_name)
         result_status = OrderedDict()
         result_status['name'] = instance_name
-        result_status['server'] = instance['server']
-        result_status['status'] = {
-            'max': max_status['status'],
-        }
-        result_status['pid'] = {
-            'max': max_status['pid'],
-        }
-
-        result_status['uptime'] = {
-            'max': max_status['uptime'],
-        }
-
+        result_status['server'] = 'del_me'
+        result_status['status'] = status['status']
+        result_status['pid'] = status['pid']
+        result_status['uptime'] = status['uptime']
         return result_status
 
     def test_activity(self, instance_name, ldap_branch):
@@ -438,21 +418,8 @@ class MaxServer(object):
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def create_circus_nginx_entry(self):
-
-        circus_nginx_params = {
-            'circus_nginx_port': int(self.instance.index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_httpd_endpoint': int(self.instance.index) + CIRCUS_HTTPD_BASE_PORT
-        }
-        circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
-        nginx_file_location = "{}/config/circus-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-
-        self.remote.put_file(nginx_file_location, circus_nginxentry),
-        return success_log("Succesfully created {}".format(nginx_file_location))
-
     def create_startup_script(self):
         initd_params = {
-            'port_index': int(self.instance.index) + CIRCUS_TCP_BASE_PORT,
             'instance_folder': self.buildout.folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)
@@ -532,7 +499,7 @@ class MaxServer(object):
         self.reload(self.instance.name, 'max')
         sleep(1)
         status = self.get_status(self.instance.name)
-        if status['status']['max'] == 'active':
+        if status['status'] == 'running':
             return success_log("Succesfully restarted max {}".format(self.instance.name))
         else:
             return error_log('Max instance {} is not running'.format(self.instance.name))

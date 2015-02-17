@@ -1,18 +1,14 @@
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
-from gummanager.libs.utils import circus_status, circus_control, supervisor_process_status, supervisor_process_start, supervisor_process_stop
+from gummanager.libs.utils import supervisor_process_status, supervisor_process_start, supervisor_process_stop
 from gummanager.libs.utils import progress_log, padded_success, padded_error, padded_log
-from gummanager.libs.ports import CIRCUS_HTTPD_BASE_PORT
-from gummanager.libs.ports import CIRCUS_TCP_BASE_PORT
-from gummanager.libs.ports import CIRCUS_NGINX_BASE_PORT
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
 
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import INIT_D_SCRIPT
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
-from gummanager.libs.config_files import CIRCUS_NGINX_ENTRY
 
 from collections import OrderedDict, namedtuple
 from time import sleep
@@ -65,10 +61,10 @@ class OauthServer(object):
         instance = self.get_instance(instance_name)
         if status['status'] == 'unknown':
             padded_log('supervisor stopped ...')
-            # code, stdout = self.remote.execute('/etc/init.d/oauth_{} start'.format(instance_name))
+
         elif status['status'].lower() == 'stopped':
             padded_log('Osiris stopped, starting process ...')
-            supervisor_process_start(instance['supervisor_xmlrpc'],instance_name)
+            supervisor_process_start(instance['supervisor_xmlrpc'], 'max_' + instance_name)
 
         padded_log('Waiting for osiris to start...')
         sleep(1)
@@ -82,7 +78,7 @@ class OauthServer(object):
     def stop(self, instance_name):
         progress_log('Stopping instance')
         instance = self.get_instance(instance_name)
-        supervisor_process_stop(instance['supervisor_xmlrpc'],instance_name)
+        supervisor_process_stop(instance['supervisor_xmlrpc'], 'max_' + instance_name)
 
         padded_log('Waiting for osiris to stop...')
         sleep(1)
@@ -94,7 +90,7 @@ class OauthServer(object):
 
     def get_status(self, instance_name):
         instance = self.get_instance(instance_name)
-        status = supervisor_process_status(instance['supervisor_xmlrpc'],instance_name)
+        status = supervisor_process_status(instance['supervisor_xmlrpc'], 'max_' + instance_name)
         result_status = OrderedDict()
         result_status['name'] = instance_name
         result_status['server'] = 'del_me'
@@ -103,39 +99,40 @@ class OauthServer(object):
         result_status['uptime'] = status['uptime']
         return result_status
 
-
     def get_instance(self, instance_name):
-        osiris_ini = self.buildout.config_files[instance_name].get('osiris.ini', '')
-        if not osiris_ini:
-            return {}
-        osiris = parse_ini_from(osiris_ini)
+        if instance_name not in self._instances:
+            osiris_ini = self.buildout.config_files[instance_name].get('osiris.ini', '')
+            if not osiris_ini:
+                return {}
+            osiris = parse_ini_from(osiris_ini)
 
-        ldap_ini = self.buildout.config_files[instance_name].get('ldap.ini', '')
-        if not ldap_ini:
-            return {}
-        ldap = parse_ini_from(ldap_ini)
+            ldap_ini = self.buildout.config_files[instance_name].get('ldap.ini', '')
+            if not ldap_ini:
+                return {}
+            ldap = parse_ini_from(ldap_ini)
 
-        port_index = int(osiris['server:main']['port']) - OSIRIS_BASE_PORT
+            port_index = int(osiris['server:main']['port']) - OSIRIS_BASE_PORT
 
-        instance = OrderedDict()
-        instance['name'] = instance_name
-        instance['port_index'] = port_index
-        instance['mongo_database'] = osiris['app:main']['osiris.store.db']
-        instance['server'] = {
-            'direct': 'http://{}:{}'.format(self.config.server, osiris['server:main']['port']),
-            'dns': 'https://{}/{}'.format(self.config.server_dns, instance_name)
-        }
-        print 
-        instance['ldap'] = {
-            'server': ldap['ldap']['server'],
-            'basedn': ldap['ldap']['userbasedn'],
-            'branch': re.match(r"ou=(.*?),", ldap['ldap']['userbasedn']).groups()[0]
-        }
-        instance['circus'] = 'http://{}:{}'.format(self.config.server, CIRCUS_HTTPD_BASE_PORT + port_index)
-        instance['circus_tcp'] = 'tcp://{}:{}'.format(self.config.server, CIRCUS_TCP_BASE_PORT + port_index)
-        instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(self.config.supervisor_password,self.config.server,self.config.supervisor_port )
+            instance = OrderedDict()
+            instance['name'] = instance_name
+            instance['port_index'] = port_index
+            instance['mongo_database'] = osiris['app:main']['osiris.store.db']
+            instance['server'] = {
+                'direct': 'http://{}:{}'.format(self.config.server, osiris['server:main']['port']),
+                'dns': 'https://{}/{}'.format(self.config.server_dns, instance_name)
+            }
 
-        return instance
+            instance['ldap'] = {
+                'server': ldap['ldap']['server'],
+                'basedn': ldap['ldap']['userbasedn'],
+                'branch': re.match(r"ou=(.*?),", ldap['ldap']['userbasedn']).groups()[0]
+            }
+            instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(
+                self.config.supervisor.password,
+                self.config.server,
+                self.config.supervisor.port)
+            self._instances[instance_name] = instance
+        return self._instances[instance_name]
 
     def instance_by_port_index(self, port_index):
         instances = self.get_instances()
@@ -225,21 +222,8 @@ class OauthServer(object):
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def create_circus_nginx_entry(self):
-
-        circus_nginx_params = {
-            'circus_nginx_port': int(self.instance.index) + CIRCUS_NGINX_BASE_PORT,
-            'circus_httpd_endpoint': int(self.instance.index) + CIRCUS_HTTPD_BASE_PORT
-        }
-        circus_nginxentry = CIRCUS_NGINX_ENTRY.format(**circus_nginx_params)
-        nginx_file_location = "{}/config/circus-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-
-        self.remote.put_file(nginx_file_location, circus_nginxentry),
-        return success_log("Succesfully created {}".format(nginx_file_location))
-
     def create_startup_script(self):
         initd_params = {
-            'port_index': int(self.instance.index) + CIRCUS_TCP_BASE_PORT,
             'instance_folder': self.buildout.folder
         }
         initd_script = INIT_D_SCRIPT.format(**initd_params)

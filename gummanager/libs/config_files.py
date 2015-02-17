@@ -15,19 +15,17 @@ INIT_D_SCRIPT = """#!/bin/sh
 # chkconfig: - 85 15
 
 WORKDIR={instance_folder}
-CONFDIR=$WORKDIR/config
-ENDPOINT={port_index}
 
 case "$1" in
 'start')
-        $WORKDIR/bin/circusd $CONFDIR/circus.ini --daemon
+        $WORKDIR/bin/supervisord
 ;;
 'stop')
-        $WORKDIR/bin/circusctl --endpoint tcp://127.0.0.1:$ENDPOINT stop
-        $WORKDIR/bin/circusctl --endpoint tcp://127.0.0.1:$ENDPOINT quit
+        $WORKDIR/bin/supervisorctl stop all
+        $WORKDIR/bin/supervisorctl shutdown
 ;;
 'restart')
-        $WORKDIR/bin/circusctl --endpoint tcp://127.0.0.1:$ENDPOINT restart
+        $WORKDIR/bin/circusctl restart all
 ;;
 *)
     echo "Usage: $0 {{ start | stop | restart }}"
