@@ -4,7 +4,7 @@ from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, 
 from gummanager.libs.utils import message_log
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.mixins import ProcessHelper
+from gummanager.libs.mixins import ProcessHelper, TokenHelper
 
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
