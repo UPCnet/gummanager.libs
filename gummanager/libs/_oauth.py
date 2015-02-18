@@ -240,6 +240,9 @@ class OauthServer(ProcessHelper, object):
             yield step_log('Configuring customizeme.cfg')
             yield self.configure_instance()
 
+            yield step_log('Configuring mongoauth.cfg')
+            yield self.configure_mongoauth()
+
             yield step_log('Configuring ldap.ini')
             yield self.configure_ldap()
 
