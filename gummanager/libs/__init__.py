@@ -13,7 +13,18 @@ from _genweb import GenwebServer
 from _ulearn import ULearnServer
 from _utalk import UTalkServer
 
+# PEP8
+LdapServer = LdapServer
+OauthServer = OauthServer
+MaxServer = MaxServer
+GenwebServer = GenwebServer
+ULearnServer = ULearnServer
+UTalkServer = UTalkServer
+
+
+#
 # Patch for sh to accept a partial as a argument
+#
 
 
 def patched__init__(
@@ -28,7 +39,8 @@ def patched__init__(
     self.decode_errors = process.call_args["decode_errors"]
 
     self.pipe_queue = None
-    if pipe_queue: self.pipe_queue = weakref.ref(pipe_queue)
+    if pipe_queue:
+        self.pipe_queue = weakref.ref(pipe_queue)
 
     self.log = Logger("streamreader", repr(self))
 
@@ -37,21 +49,26 @@ def patched__init__(
         self.decode_errors)
 
     # determine buffering
-    if bufsize == 1: self.bufsize = 1024
-    elif bufsize == 0: self.bufsize = 1
-    else: self.bufsize = bufsize
-
+    if bufsize == 1:
+        self.bufsize = 1024
+    elif bufsize == 0:
+        self.bufsize = 1
+    else:
+        self.bufsize = bufsize
 
     # here we're determining the handler type by doing some basic checks
     # on the handler object
     self.handler = handler
-    if callable(handler): self.handler_type = "fn"
-    elif isinstance(handler, StringIO): self.handler_type = "stringio"
+    if callable(handler):
+        self.handler_type = "fn"
+    elif isinstance(handler, StringIO):
+        self.handler_type = "stringio"
     elif isinstance(handler, cStringIO):
         self.handler_type = "cstringio"
-    elif hasattr(handler, "write"): self.handler_type = "fd"
-    else: self.handler_type = None
-
+    elif hasattr(handler, "write"):
+        self.handler_type = "fd"
+    else:
+        self.handler_type = None
 
     self.should_quit = False
 
@@ -78,7 +95,6 @@ def patched__init__(
                 else:
                     implied_arg = 1
                     num_args = len(inspect.getargspec(handler.__call__).args)
-
 
         self.handler_args = ()
         if num_args == implied_arg + 2:
