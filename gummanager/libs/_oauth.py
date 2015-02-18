@@ -111,8 +111,9 @@ class OauthServer(ProcessHelper, TokenHelper, object):
             token = self.get_token(instance['server']['dns'], username, password)
 
             if token is None:
-                yield error_log('Error retreiving token')
+                yield error_log('Error retreiving token. Check username/password and try again')
 
+            yield message_log('Checking retreived token')
             succeed = self.check_token(instance['server']['dns'], username, token)
 
             if not succeed:

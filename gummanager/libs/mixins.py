@@ -27,7 +27,7 @@ class TokenHelper(object):
         req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
         response = json.loads(req.text)
         if req.status_code == 200:
-            token = response.get("oauth_token")
+            token = response.get("access_token")
             return token
         else:
             return None
