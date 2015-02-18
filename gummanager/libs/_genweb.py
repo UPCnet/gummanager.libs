@@ -97,7 +97,8 @@ class Plone(object):
             "branch_name": branch,
             "base_dn": ldap_config.base_dn,
             "branch_admin_cn": ldap_config.branch_admin_cn,
-            "branch_admin_password": ldap_config.branch_admin_password
+            "branch_admin_password": ldap_config.branch_admin_password,
+            "allow_manage_users": True
         }
         req = requests.post(setup_view_url, data=params, auth=self.auth)
 
