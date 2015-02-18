@@ -108,12 +108,12 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         try:
             yield step_log('Testing oauth server @ {}'.format(instance['server']['dns']))
             yield message_log('Retrieving token for "{}"'.format(username))
-            token = self.get_token(instance['server']['dns'], username)
+            token = self.get_token(instance['server']['dns'], username, password)
 
             if token is None:
                 yield error_log('Error retreiving token')
 
-            succeed = self.check_token(instance['server']['dns'], token)
+            succeed = self.check_token(instance['server']['dns'], username, token)
 
             if not succeed:
                 yield error_log('Error retreiving token')
