@@ -13,7 +13,7 @@ from collections import OrderedDict, namedtuple
 import re
 
 
-class OauthServer(ProcessHelper, object):
+class OauthServer(ProcessHelper, TokenHelper, object):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
@@ -102,6 +102,28 @@ class OauthServer(ProcessHelper, object):
             yield self.reload_nginx()
         except StepError as error:
             yield error_log(error.message)
+
+    def test(self, instance_name, username, password):
+        instance = self.get_instance(instance_name)
+        try:
+            yield step_log('Testing oauth server @ {}'.format(instance['server']['dns']))
+            yield message_log('Retrieving token for "{}"'.format(username))
+            token = self.get_token(instance['server']['dns'], username)
+
+            if token is None:
+                yield error_log('Error retreiving token')
+
+            succeed = self.check_token(instance['server']['dns'], token)
+
+            if not succeed:
+                yield error_log('Error retreiving token')
+
+            yield success_log('Oauth server check passed')
+        except StepError as error:
+            yield error_log(error.message)
+
+
+
 
     # Steps
 

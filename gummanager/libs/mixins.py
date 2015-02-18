@@ -27,13 +27,21 @@ class TokenHelper(object):
         req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
         response = json.loads(req.text)
         if req.status_code == 200:
-            token = response.get("access_token", False)
-            # Fallback to legacy oauth server
-            if not token:
-                token = response.get("oauth_token")
+            token = response.get("oauth_token")
             return token
         else:
             return None
+
+    @staticmethod
+    def check_token(oauth_server, username, token):
+        payload = {
+            "access_token": token,
+            "username": username,
+            "scope": 'widgetcli',
+            "grant_type": 'password'
+        }
+        req = requests.post('{0}/checktoken'.format(oauth_server), data=payload, verify=False)
+        return req.status_code == 200
 
     @staticmethod
     def oauth_headers(username, token):
