@@ -21,7 +21,7 @@ class LdapServer(object):
         self.leaf_dn = ''
 
     def set_server(self, **params):
-        self.ldap_uri = '{server}:{port}'.format(**params)
+        self.ldap_uri = 'ldaps://{server}:{port}'.format(**params)
 
     def connect(self, auth=True):
         self.ld = ldap.initialize(self.ldap_uri)
