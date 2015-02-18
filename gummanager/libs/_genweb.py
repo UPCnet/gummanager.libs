@@ -89,17 +89,17 @@ class Plone(object):
         else:
             return success_log('Successfully rebuild site catalog'.format(self.site_url))
 
-    def setup_ldap(self, branch='', password=''):
+    def setup_ldap(self, branch, ldap_config):
         setup_view_url = '{}/setupldap'.format(self.site_url)
         params = {
-            "ldap_name": self.config.ldap.name,
-            "ldap_server": self.config.ldap_config.server,
+            "ldap_name": ldap_config.name,
+            "ldap_server": ldap_config.server,
             "branch_name": branch,
-            "base_dn": self.config.ldap_config.base_dn,
-            "branch_admin_cn": self.config.ldap_config.branch_admin_cn,
-            "branch_admin_password": self.config.ldap_config.branch_admin_cn
+            "base_dn": ldap_config.base_dn,
+            "branch_admin_cn": ldap_config.branch_admin_cn,
+            "branch_admin_password": ldap_config.branch_admin_password
         }
-        req = requests.post(setup_view_url, payload=params, auth=self.auth)
+        req = requests.post(setup_view_url, data=params, auth=self.auth)
 
         if req.status_code not in [302, 200, 204, 201]:
             return error_log('Error on ldap branch "{}" setup'.format(branch))

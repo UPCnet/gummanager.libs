@@ -236,7 +236,7 @@ class ULearnServer(GenwebServer):
         yield site.setup_homepage()
 
         yield step_log('Setting up ldap')
-        yield site.setup_ldap(branch=ldap_branch, password=ldap_password)
+        yield site.setup_ldap(ldap_branch, self.config.ldap_config)
 
         yield step_log('Setting up max')
         yield site.setup_max(max_name, oauth_name, ldap_branch)
