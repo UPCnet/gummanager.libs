@@ -90,30 +90,17 @@ class Plone(object):
             return success_log('Successfully rebuild site catalog'.format(self.site_url))
 
     def setup_ldap(self, branch='', password=''):
-        setup_view_url = '{}/setupldapexterns'.format(self.site_url)
-        req = requests.get(setup_view_url, auth=self.auth)
-
-        ldap_params = {
-            'title': '{}-LDAP'.format(branch.upper()),
-            'login_attr': 'cn',
-            'uid_attr': 'cn',
-            'rdn_attr': 'cn',
-            'users_base': 'ou=users,ou={},dc=upcnet,dc=es'.format(branch),
-            'users_scope:int': '2',
-            'local_groups:int': '0',
-            'implicit_mapping:int': '0',
-            'groups_base': 'ou=groups,ou={},dc=upcnet,dc=es'.format(branch),
-            'groups_scope:int': '2',
-            'binduid:string': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(branch),
-            'bindpwd:string': password,
-            'binduid_usage:int': '1',
-            'obj_classes': 'top,person,inetOrgPerson',
-            'extra_user_filter': '',
-            'encryption': 'SSHA',
-            'roles': 'Authenticated,Member'
+        setup_view_url = '{}/setupldap'.format(self.site_url)
+        params = {
+            "ldap_name": self.config.ldap.name,
+            "ldap_server": self.config.ldap_config.server,
+            "branch_name": branch,
+            "base_dn": self.config.ldap_config.base_dn,
+            "branch_admin_cn": self.config.ldap_config.branch_admin_cn,
+            "branch_admin_password": self.config.ldap_config.branch_admin_cn
         }
-        ldap_setup_url = '{}/acl_users/ldapexterns/acl_users/manage_edit'.format(self.site_url)
-        req = requests.post(ldap_setup_url, ldap_params, auth=self.auth)
+        req = requests.post(setup_view_url, payload=params, auth=self.auth)
+
         if req.status_code not in [302, 200, 204, 201]:
             return error_log('Error on ldap branch "{}" setup'.format(branch))
         else:

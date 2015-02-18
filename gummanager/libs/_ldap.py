@@ -4,7 +4,6 @@ import ldap
 import ldap.modlist as modlist
 import os
 from collections import OrderedDict
-from gummanager.libs.utils import admin_password_for_branch
 from gummanager.libs.batch import read_users_file
 from gummanager.libs.utils import step_log, error_log, success_log, raising_error_log
 from collections import Counter
@@ -119,12 +118,12 @@ class LdapServer(object):
         })
         self.ld.add_s(dn, ldif)
 
-    def add_branch(self, branch_name):
+    def add_branch(self, branch_name, password):
         self.cd('/')
         self.addOU(branch_name)
         self.cd('ou={}'.format(branch_name))
         self.addUser(self.config.branch_admin_cn, 'LDAP Access User', self.config.branch_admin_password)
-        self.addUser('restricted', 'Restricted User', admin_password_for_branch(branch_name))
+        self.addUser('restricted', 'Restricted User', password)
 
         self.addGroup('Managers')
         self.addOU('groups')
