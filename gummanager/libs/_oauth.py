@@ -11,6 +11,7 @@ from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
 
 from collections import OrderedDict, namedtuple
 import re
+import requests
 
 
 class OauthServer(ProcessHelper, TokenHelper, object):
@@ -107,6 +108,16 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         instance = self.get_instance(instance_name)
         try:
             yield step_log('Testing oauth server @ {}'.format(instance['server']['dns']))
+
+            yield message_log('Checking server is online "{}"')
+            status = requests.get(instance['server']['dns']).status_code
+            if status == 404:
+                yield error_log('There''s no oauth server at {}. Chech there''s an nginx entry for this server.'.format(instance['server']['dns']))
+            elif status == 502:
+                yield error_log('Server not respoding at {}. Check osiris process is running.'.format(instance['server']['dns']))
+            else:
+                yield error_log('Server {} responded with {}. Check osiris configuration.'.format(instance['server']['dns']))
+
             yield message_log('Retrieving token for "{}"'.format(username))
             token = self.get_token(instance['server']['dns'], username, password)
 
