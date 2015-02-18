@@ -148,9 +148,16 @@ class OauthServer(ProcessHelper, object):
                 'ldap': {
                     'server': self.config.ldap_config['server'],
                     'password': self.config.ldap_config['branch_admin_password'],
-                    'userbind': 'cn=ldap,ou={},dc=upcnet,dc=es'.format(self.instance.ldap),
-                    'userbasedn': 'ou={},dc=upcnet,dc=es'.format(self.instance.ldap),
-                    'groupbasedn': 'ou=groups,ou={},dc=upcnet,dc=es'.format(self.instance.ldap)
+                    'userbind': 'cn={},ou={},{}'.format(
+                        self.config.ldap_config['branch_admin_cn'],
+                        self.instance.ldap,
+                        self.config.ldap_config['base_dn']),
+                    'userbasedn': 'ou={},{}'.format(
+                        self.instance.ldap,
+                        self.config.ldap_config['base_dn']),
+                    'groupbasedn': 'ou=groups,ou={},{}'.format(
+                        self.instance.ldap,
+                        self.config.ldap_config['base_dn'])
                 }
             }
         )
