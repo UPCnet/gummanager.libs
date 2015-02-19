@@ -1,21 +1,30 @@
-from gummanager.libs.utils import RemoteConnection
-from gummanager.libs.utils import configure_ini
-from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
-from gummanager.libs.utils import message_log
-from gummanager.libs.utils import command
-from gummanager.libs.ports import OSIRIS_BASE_PORT
+# -*- coding: utf-8 -*-
+from collections import OrderedDict
+from collections import namedtuple
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.mixins import ProcessHelper, TokenHelper
-
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
+from gummanager.libs.mixins import CommonSteps
+from gummanager.libs.mixins import NginxHelpers
+from gummanager.libs.mixins import SupervisorHelpers
+from gummanager.libs.mixins import TokenHelper
+from gummanager.libs.ports import OSIRIS_BASE_PORT
+from gummanager.libs.pyramid import PyramidServer
+from gummanager.libs.utils import RemoteConnection
+from gummanager.libs.utils import StepError
+from gummanager.libs.utils import command
+from gummanager.libs.utils import configure_ini
+from gummanager.libs.utils import error_log
+from gummanager.libs.utils import message_log
+from gummanager.libs.utils import parse_ini_from
+from gummanager.libs.utils import step_log
+from gummanager.libs.utils import success_log
 
-from collections import OrderedDict, namedtuple
 import re
 import requests
 
 
-class OauthServer(ProcessHelper, TokenHelper, object):
+class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, PyramidServer):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
@@ -27,18 +36,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
 
         if not self.remote.file_exists(self.config.instances_root):
             self.remote.mkdir(self.config.instances_root)
-
-    def get_instances(self):
-        instances = []
-        for instance_name in self.buildout.config_files:
-            instance = self.get_instance(instance_name)
-            if instance:
-                instances.append(instance)
-        return instances
-
-    def set_instance(self, **kwargs):
-        InstanceData = namedtuple('InstanceData', kwargs.keys())
-        self.instance = InstanceData(**kwargs)
 
     def get_instance(self, instance_name):
         if instance_name not in self._instances:
@@ -71,36 +68,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
             self._instances[instance_name] = instance
         return self._instances[instance_name]
 
-    def instance_by_port_index(self, port_index):
-        instances = self.get_instances()
-        for instance in instances:
-            if instance['port_index'] == port_index:
-                return instance
-        return None
-
-    def instance_by_dns(self, dns):
-        instances = self.get_instances()
-        for instance in instances:
-            if instance['server']['dns'] == dns:
-                return instance
-        return None
-
-    def get_available_port(self):
-        instances = self.get_instances()
-        ports = [instance['port_index'] for instance in instances]
-        ports.sort()
-        return ports[-1] + 1 if ports else 1
-
-    def reload_nginx_configuration(self):
-        try:
-            yield step_log('Reloading nginx configuration')
-            yield message_log('Testing configuration')
-
-            yield self.test_nginx()
-            yield self.reload_nginx()
-        except StepError as error:
-            yield error_log(error.message)
-
     def test(self, instance_name, username, password):
         instance = self.get_instance(instance_name)
         try:
@@ -131,23 +98,7 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         except StepError as error:
             yield error_log(error.message)
 
-    # Steps
-
-    def clone_buildout(self):
-
-        if self.remote.file_exists('{}'.format(self.buildout.folder)):
-            return error_log('Folder {} already exists'.format(self.buildout.folder))
-
-        return success(
-            self.buildout.clone(self.config.maxserver_buildout_uri, self.config.maxserver_buildout_branch),
-            'Succesfully cloned repo at {}'.format(self.buildout.folder)
-        )
-
-    def bootstrap_buildout(self):
-        return success(
-            self.buildout.bootstrap(),
-            'Succesfully bootstraped buildout {}'.format(self.buildout.folder)
-        )
+    # Steps used in commands. Some of them defined in gummanager.libs.mixins
 
     def configure_instance(self):
         customizations = {
@@ -205,48 +156,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def configure_mongoauth(self):
-
-        customizations = {
-            'mongo-auth': {
-                'password': self.config.mongodb.password,
-            },
-        }
-
-        self.buildout.configure_file('mongoauth.cfg', customizations)
-        return success_log('Succesfully configured {}/mongoauth.cfg'.format(self.buildout.folder))
-
-    def execute_buildout(self):
-        self.buildout.execute()
-        return success_log("Succesfully created a new oauth instance")
-
-    def configure_supervisor(self):
-        new_instance_folder = '{}/{}'.format(
-            self.config.instances_root,
-            self.instance.name
-        )
-
-        settings = {
-            'supervisor': {'parts': [new_instance_folder]}
-        }
-
-        remote_file = "{}/customizeme.cfg".format(self.config.supervisor.path)
-        customizeme = configure_ini(
-            string=self.remote.get_file(remote_file),
-            append=True,
-            params=settings)
-
-        successfull = self.remote.put_file("{}/{}".format(self.config.supervisor.path, 'customizeme.cfg'), customizeme)
-        if not successfull:
-            raise StepError('Error when configuring {}'.format(remote_file))
-
-        code, stdout = self.remote.execute('cd {} && ./supervisor_config'.format(self.config.supervisor.path), do_raise=True)
-
-        return success(
-            stdout,
-            "Succesfully added {} to supervisor".format(new_instance_folder)
-        )
-
     def commit_local_changes(self):
         self.buildout.commit_to_local_branch(
             self.config.local_git_branch,
@@ -255,10 +164,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
                 'mongoauth.cfg'
             ])
         return success_log("Succesfully commited local changes")
-
-    def set_filesystem_permissions(self):
-        self.buildout.change_permissions(self.config.process_uid)
-        return success_log("Succesfully changed permissions")
 
     # COMMANDS
 

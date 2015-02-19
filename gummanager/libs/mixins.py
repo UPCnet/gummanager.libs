@@ -8,9 +8,80 @@ from gummanager.libs.utils import padded_log
 from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import success_log
+from gummanager.libs.utils import success
+from gummanager.libs.utils import step_log
+from gummanager.libs.utils import message_log
+from gummanager.libs.utils import StepError
+from gummanager.libs.utils import configure_ini
+
 
 from time import sleep
 from collections import OrderedDict
+
+
+class CommonSteps(object):
+
+    def clone_buildout(self):
+
+        if self.remote.file_exists('{}'.format(self.buildout.folder)):
+            return error_log('Folder {} already exists'.format(self.buildout.folder))
+
+        return success(
+            self.buildout.clone(self.config.maxserver_buildout_uri, self.config.maxserver_buildout_branch),
+            'Succesfully cloned repo at {}'.format(self.buildout.folder)
+        )
+
+    def bootstrap_buildout(self):
+        return success(
+            self.buildout.bootstrap(),
+            'Succesfully bootstraped buildout {}'.format(self.buildout.folder)
+        )
+
+    def execute_buildout(self, update=False):
+        self.buildout.execute(update=update)
+        return success_log("Succesfully executed {} buildout".format(self.buildout.cfgfile))
+
+    def configure_mongoauth(self):
+
+        customizations = {
+            'mongo-auth': {
+                'password': self.config.mongodb.password,
+            },
+        }
+
+        self.buildout.configure_file('mongoauth.cfg', customizations),
+        return success_log('Succesfully configured {}/mongoauth.cfg'.format(self.buildout.folder))
+
+    def set_filesystem_permissions(self):
+        self.buildout.change_permissions(self.config.process_uid)
+        return success_log("Succesfully changed permissions")
+
+    def configure_supervisor(self):
+        new_instance_folder = '{}/{}'.format(
+            self.config.instances_root,
+            self.instance.name
+        )
+
+        settings = {
+            'supervisor': {'parts': [new_instance_folder]}
+        }
+
+        remote_file = "{}/customizeme.cfg".format(self.config.supervisor.path)
+        customizeme = configure_ini(
+            string=self.remote.get_file(remote_file),
+            append=True,
+            params=settings)
+
+        successfull = self.remote.put_file("{}/{}".format(self.config.supervisor.path, 'customizeme.cfg'), customizeme)
+        if not successfull:
+            raise StepError('Error when configuring {}'.format(remote_file))
+
+        code, stdout = self.remote.execute('cd {} && ./supervisor_config'.format(self.config.supervisor.path), do_raise=True)
+
+        return success(
+            stdout,
+            "Succesfully added {} to supervisor".format(new_instance_folder)
+        )
 
 
 class TokenHelper(object):
@@ -55,10 +126,10 @@ class TokenHelper(object):
         return headers
 
 
-class ProcessHelper(object):
+class SupervisorHelpers(object):
     """
         Methods related to starting, stopping and loading
-        supervisor processes. Also does nginx reloading
+        supervisor processes.
     """
 
     def process_name(self, instance_name):
@@ -133,6 +204,8 @@ class ProcessHelper(object):
         else:
             padded_error('Instance "{}" still active'.format(instance_name))
 
+
+class NginxHelpers(object):
     def test_nginx(self):
         code, stdout = self.remote.execute('/etc/init.d/nginx configtest')
         if code == 0 and 'done' in stdout:
@@ -146,3 +219,13 @@ class ProcessHelper(object):
             return success_log('Nginx reloaded succesfully')
         else:
             return error_log('Error reloading nginx')
+
+    def reload_nginx_configuration(self):
+        try:
+            yield step_log('Reloading nginx configuration')
+            yield message_log('Testing configuration')
+
+            yield self.test_nginx()
+            yield self.reload_nginx()
+        except StepError as error:
+            yield error_log(error.message)

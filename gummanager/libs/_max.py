@@ -1,35 +1,39 @@
+# -*- coding: utf-8 -*-
 from maxclient.rest import MaxClient
+from maxutils.mongodb import get_connection
+from maxutils.mongodb import get_database
 
 from collections import OrderedDict
 from gevent.event import AsyncResult
 from gummanager.libs.buildout import RemoteBuildoutHelper
-from gummanager.libs.config_files import MAX_NGINX_ENTRY
 from gummanager.libs.config_files import BIGMAX_INSTANCE_ENTRY
+from gummanager.libs.config_files import MAX_NGINX_ENTRY
+from gummanager.libs.mixins import CommonSteps
+from gummanager.libs.mixins import NginxHelpers
+from gummanager.libs.mixins import SupervisorHelpers
 from gummanager.libs.ports import BIGMAX_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
+from gummanager.libs.pyramid import PyramidServer
 from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import admin_password_for_branch
+from gummanager.libs.utils import command
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import padded_error
-from gummanager.libs.utils import padded_log, message_log
+from gummanager.libs.utils import padded_log
 from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import step_log
-from gummanager.libs.utils import configure_ini
-from gummanager.libs.utils import success_log, StepError, success
-from gummanager.libs.mixins import ProcessHelper
+from gummanager.libs.utils import success
+from gummanager.libs.utils import success_log
 from time import sleep
 
-from maxutils.mongodb import get_connection, get_database
-
-from collections import namedtuple
 import gevent
-import requests
 import re
+import requests
 
 
-class MaxServer(ProcessHelper, object):
+class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
@@ -77,48 +81,8 @@ class MaxServer(ProcessHelper, object):
                 'dns': maxconfig['app:main']['max.server']
             }
             instance['oauth'] = maxconfig['app:main']['max.oauth_server']
-            instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(
-                self.config.supervisor.password,
-                self.config.server,
-                self.config.supervisor.port)
-
             self._instances[instance_name] = instance
         return self._instances[instance_name]
-
-    def set_instance(self, **kwargs):
-        InstanceData = namedtuple('InstanceData', kwargs.keys())
-        self.instance = InstanceData(**kwargs)
-
-    def instance_by_port_index(self, port_index):
-        instances = self.get_instances()
-        for instance in instances:
-            if instance['port_index'] == port_index:
-                return instance
-        return None
-
-    def get_available_port(self):
-        instances = self.get_instances()
-        ports = [instance['port_index'] for instance in instances]
-        ports.sort()
-        return ports[-1] + 1 if ports else 1
-
-    def get_instances(self):
-        instances = []
-        for instance_name in self.buildout.config_files:
-            instance = self.get_instance(instance_name)
-            if instance:
-                instances.append(instance)
-        return instances
-
-    def reload_nginx_configuration(self):
-        try:
-            yield step_log('Reloading nginx configuration')
-            yield message_log('Testing configuration')
-
-            yield self.test_nginx()
-            yield self.reload_nginx()
-        except StepError as error:
-            yield error_log(error.message)
 
     def test_activity(self, instance_name, ldap_branch):
 
@@ -220,31 +184,14 @@ class MaxServer(ProcessHelper, object):
         else:
             padded_error('Websocket test failed, Timed out')
 
-    # Steps
-
-    def clone_buildout(self):
-        repo_url = 'https://github.com/UPCnet/maxserver'
-
-        if self.remote.file_exists('{}'.format(self.buildout.folder)):
-            return error_log('Folder {} already exists'.format(self.buildout.folder))
-
-        return success(
-            self.buildout.clone(repo_url),
-            'Succesfully cloned repo at {}'.format(self.buildout.folder)
-        )
-
-    def bootstrap_buildout(self):
-        return success(
-            self.buildout.bootstrap(),
-            'Succesfully bootstraped buildout {}'.format(self.buildout.folder)
-        )
+    # Steps used in commands. Some of them defined in gummanager.libs.mixins
 
     def configure_instance(self):
 
         customizations = {
             'mongodb-config': {
-                'replica_set': self.config.replica_set,
-                'cluster_hosts': self.config.mongodb_cluster
+                'replica_set': self.config.mongodb.replica_set,
+                'cluster_hosts': self.config.mongodb.cluster
             },
             'max-config': {
                 'name': self.instance.name,
@@ -258,7 +205,7 @@ class MaxServer(ProcessHelper, object):
             },
             'hosts': {
                 'max': self.config.server_dns,
-                'oauth': self.config.default_oauth_server_dns,
+                'oauth': self.config.oauth.server_dns,
                 'rabbitmq': self.config.rabbitmq.server
 
             }
@@ -266,21 +213,6 @@ class MaxServer(ProcessHelper, object):
 
         self.buildout.configure_file('customizeme.cfg', customizations),
         return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
-
-    def configure_mongoauth(self):
-
-        customizations = {
-            'mongo-auth': {
-                'password': self.config.mongodb_password,
-            },
-        }
-
-        self.buildout.configure_file('mongoauth.cfg', customizations),
-        return success_log('Succesfully configured {}/mongoauth.cfg'.format(self.buildout.folder))
-
-    def execute_buildout(self, update=False):
-        self.buildout.execute(update=update)
-        return success_log("Succesfully executed buildout")
 
     def set_mongodb_indexes(self):
         new_instance_folder = '{}/{}'.format(
@@ -314,7 +246,7 @@ class MaxServer(ProcessHelper, object):
             replica_set = maxconfig['app:main']['mongodb.replica_set']
             conn = get_connection(hosts, replica_set)
             db_name = maxconfig['app:main']['mongodb.db_name']
-            password = self.config.mongodb_password
+            password = self.config.mongodb.password
             db = get_database(conn, db_name, username='admin', password=password, authdb='admin')
 
             if not [items for items in db.security.find({})]:
@@ -337,33 +269,6 @@ class MaxServer(ProcessHelper, object):
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
-    def configure_supervisor(self):
-        new_instance_folder = '{}/{}'.format(
-            self.config.instances_root,
-            self.instance.name
-        )
-
-        settings = {
-            'supervisor': {'parts': [new_instance_folder]}
-        }
-
-        remote_file = "{}/customizeme.cfg".format(self.config.supervisor.path)
-        customizeme = configure_ini(
-            string=self.remote.get_file(remote_file),
-            append=True,
-            params=settings)
-
-        successfull = self.remote.put_file("{}/{}".format(self.config.supervisor.path, 'customizeme.cfg'), customizeme)
-        if not successfull:
-            raise StepError('Error when configuring {}'.format(remote_file))
-
-        code, stdout = self.remote.execute('cd {} && ./supervisor_config'.format(self.config.supervisor.path), do_raise=True)
-
-        return success(
-            stdout,
-            "Succesfully added {} to supervisor".format(new_instance_folder)
-        )
-
     def commit_local_changes(self):
         self.buildout.commit_to_local_branch(
             self.config.local_git_branch,
@@ -372,10 +277,6 @@ class MaxServer(ProcessHelper, object):
                 'mongoauth.cfg'
             ])
         return success_log("Succesfully commited local changes")
-
-    def set_filesystem_permissions(self):
-        self.buildout.change_permissions(self.config.process_uid)
-        return success_log("Succesfully changed permissions")
 
     def add_instance_to_bigmax(self):
         instances_file = ''
@@ -417,6 +318,7 @@ class MaxServer(ProcessHelper, object):
 
     # Commands
 
+    @command
     def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None, rabbitmq_url=None):
 
         self.buildout.cfgfile = 'max-only.cfg'
@@ -431,46 +333,44 @@ class MaxServer(ProcessHelper, object):
             index=port_index,
             oauth=oauth_instance if oauth_instance is not None else instance_name,
         )
-        try:
-            yield step_log('Cloning buildout')
-            yield self.clone_buildout()
 
-            yield step_log('Bootstraping buildout')
-            yield self.bootstrap_buildout()
+        yield step_log('Cloning buildout')
+        yield self.clone_buildout()
 
-            yield step_log('Configuring customizeme.cfg')
-            yield self.configure_instance()
+        yield step_log('Bootstraping buildout')
+        yield self.bootstrap_buildout()
 
-            yield step_log('Configuring mongoauth.cfg')
-            yield self.configure_mongoauth()
+        yield step_log('Configuring customizeme.cfg')
+        yield self.configure_instance()
 
-            yield step_log('Executing buildout')
-            yield self.execute_buildout()
+        yield step_log('Configuring mongoauth.cfg')
+        yield self.configure_mongoauth()
 
-            yield step_log('Adding indexes to mongodb')
-            yield self.set_mongodb_indexes()
+        yield step_log('Executing buildout')
+        yield self.execute_buildout()
 
-            yield step_log('Configuring default permissions settings')
-            yield self.configure_max_security_settings()
+        yield step_log('Adding indexes to mongodb')
+        yield self.set_mongodb_indexes()
 
-            yield step_log('Creating nginx entry for max')
-            yield self.create_max_nginx_entry()
+        yield step_log('Configuring default permissions settings')
+        yield self.configure_max_security_settings()
 
-            yield step_log('Commiting to local branch')
-            yield self.commit_local_changes()
+        yield step_log('Creating nginx entry for max')
+        yield self.create_max_nginx_entry()
 
-            yield step_log('Changing permissions')
-            yield self.set_filesystem_permissions()
+        yield step_log('Commiting to local branch')
+        yield self.commit_local_changes()
 
-            yield step_log('Adding instance to supervisor config')
-            yield self.configure_supervisor()
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
 
-            yield step_log('Adding instance to bigmax')
-            yield self.add_instance_to_bigmax()
+        yield step_log('Adding instance to supervisor config')
+        yield self.configure_supervisor()
 
-        except StepError as error:
-            yield error_log(error.message)
+        yield step_log('Adding instance to bigmax')
+        yield self.add_instance_to_bigmax()
 
+    @command
     def upgrade(self, instance_name, logecho=None):
         self.buildout.cfgfile = 'max-only.cfg'
         self.buildout.logecho = logecho
@@ -482,21 +382,18 @@ class MaxServer(ProcessHelper, object):
         self.set_instance(
             name=instance_name,
         )
-        try:
-            yield step_log('Updating buildout')
-            yield self.update_buildout()
 
-            yield step_log('Executing buildout')
-            yield self.execute_buildout(update=True)
+        yield step_log('Updating buildout')
+        yield self.update_buildout()
 
-            yield step_log('Changing permissions')
-            yield self.set_filesystem_permissions()
+        yield step_log('Executing buildout')
+        yield self.execute_buildout(update=True)
 
-            yield step_log('Reloading max')
-            yield self.reload_instance()
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
 
-            yield step_log('Checking running version')
-            yield self.check_version()
+        yield step_log('Reloading max')
+        yield self.reload_instance()
 
-        except StepError as error:
-            yield error_log(error.message)
+        yield step_log('Checking running version')
+        yield self.check_version()
