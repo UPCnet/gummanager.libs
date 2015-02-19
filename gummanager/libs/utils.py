@@ -8,11 +8,19 @@ import humanize
 import re
 from blessings import Terminal
 
-# import to connect through xmlrpc with supervisor
-import xmlrpclib
-
 term = Terminal()
 DEBUG_MODE = True
+
+
+def command(func):
+    def inner(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+            for yielded in result:
+                yield yielded
+        except StepError as error:
+            yield error_log(error.message)
+    return inner
 
 
 def process_output(lines, prefix=''):
@@ -105,6 +113,10 @@ def raising_error_log(message):
         return (4, message)
     else:
         return message
+
+
+def return_value(value):
+    return (5, value)
 
 
 def success_log(message):
