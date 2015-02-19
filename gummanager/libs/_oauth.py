@@ -180,7 +180,7 @@ class OauthServer(ProcessHelper, TokenHelper, object):
             string=LDAP_INI,
             params={
                 'ldap': {
-                    'server': self.config.ldap_config['server'],
+                    'server': 'ldaps://{}'.format(self.config.ldap_config['server']),
                     'password': self.config.ldap_config['branch_admin_password'],
                     'userbind': 'cn={},ou={},{}'.format(
                         self.config.ldap_config['branch_admin_cn'],
@@ -211,6 +211,16 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
         self.remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
+
+    def configure_mongoauth(self):
+
+        customizations = {
+            'mongo-auth': {
+                'password': self.config.mongodb_password,
+            },
+        }
+
+        self.buildout.configure_file('mongoauth.cfg', customizations),
 
     def execute_buildout(self):
         self.buildout.execute()
