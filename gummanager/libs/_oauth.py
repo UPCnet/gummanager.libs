@@ -2,6 +2,7 @@ from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import configure_ini
 from gummanager.libs.utils import parse_ini_from, error_log, success, step_log, success_log, StepError
 from gummanager.libs.utils import message_log
+from gummanager.libs.utils import command
 from gummanager.libs.ports import OSIRIS_BASE_PORT
 from gummanager.libs.buildout import RemoteBuildoutHelper
 from gummanager.libs.mixins import ProcessHelper, TokenHelper
@@ -67,10 +68,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
                 'basedn': ldap['ldap']['userbasedn'],
                 'branch': re.match(r"ou=(.*?),", ldap['ldap']['userbasedn']).groups()[0]
             }
-            instance['supervisor_xmlrpc'] = 'http://admin:{}@{}:{}/RPC2'.format(
-                self.config.supervisor.password,
-                self.config.server,
-                self.config.supervisor.port)
             self._instances[instance_name] = instance
         return self._instances[instance_name]
 
@@ -137,13 +134,12 @@ class OauthServer(ProcessHelper, TokenHelper, object):
     # Steps
 
     def clone_buildout(self):
-        repo_url = 'https://github.com/UPCnet/maxserver'
 
         if self.remote.file_exists('{}'.format(self.buildout.folder)):
             return error_log('Folder {} already exists'.format(self.buildout.folder))
 
         return success(
-            self.buildout.clone(repo_url),
+            self.buildout.clone(self.config.maxserver_buildout_uri, self.config.maxserver_buildout_branch),
             'Succesfully cloned repo at {}'.format(self.buildout.folder)
         )
 
@@ -156,8 +152,8 @@ class OauthServer(ProcessHelper, TokenHelper, object):
     def configure_instance(self):
         customizations = {
             'mongodb-config': {
-                'replica_set': self.config.replica_set,
-                'cluster_hosts': self.config.mongodb_cluster
+                'replica_set': self.config.mongodb.replica_set,
+                'cluster_hosts': self.config.mongodb.cluster
             },
             'osiris-config': {
                 'name': self.instance.name,
@@ -213,11 +209,12 @@ class OauthServer(ProcessHelper, TokenHelper, object):
 
         customizations = {
             'mongo-auth': {
-                'password': self.config.mongodb_password,
+                'password': self.config.mongodb.password,
             },
         }
 
-        self.buildout.configure_file('mongoauth.cfg', customizations),
+        self.buildout.configure_file('mongoauth.cfg', customizations)
+        return success_log('Succesfully configured {}/mongoauth.cfg'.format(self.buildout.folder))
 
     def execute_buildout(self):
         self.buildout.execute()
@@ -263,6 +260,9 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         self.buildout.change_permissions(self.config.process_uid)
         return success_log("Succesfully changed permissions")
 
+    # COMMANDS
+
+    @command
     def new_instance(self, instance_name, port_index, ldap_branch=None, logecho=None):
 
         self.buildout.cfgfile = 'osiris-only.cfg'
@@ -278,36 +278,32 @@ class OauthServer(ProcessHelper, TokenHelper, object):
             ldap=ldap_branch if ldap_branch is not None else instance_name
         )
 
-        try:
-            yield step_log('Cloning buildout')
-            yield self.clone_buildout()
+        yield step_log('Cloning buildout')
+        yield self.clone_buildout()
 
-            yield step_log('Bootstraping buildout')
-            yield self.bootstrap_buildout()
+        yield step_log('Bootstraping buildout')
+        yield self.bootstrap_buildout()
 
-            yield step_log('Configuring customizeme.cfg')
-            yield self.configure_instance()
+        yield step_log('Configuring customizeme.cfg')
+        yield self.configure_instance()
 
-            yield step_log('Configuring mongoauth.cfg')
-            yield self.configure_mongoauth()
+        yield step_log('Configuring mongoauth.cfg')
+        yield self.configure_mongoauth()
 
-            yield step_log('Configuring ldap.ini')
-            yield self.configure_ldap()
+        yield step_log('Configuring ldap.ini')
+        yield self.configure_ldap()
 
-            yield step_log('Creating nginx entry for oauth')
-            yield self.create_max_nginx_entry()
+        yield step_log('Creating nginx entry for oauth')
+        yield self.create_max_nginx_entry()
 
-            yield step_log('Executing buildout')
-            yield self.execute_buildout()
+        yield step_log('Executing buildout')
+        yield self.execute_buildout()
 
-            yield step_log('Commiting to local branch')
-            yield self.commit_local_changes()
+        yield step_log('Commiting to local branch')
+        yield self.commit_local_changes()
 
-            yield step_log('Changing permissions')
-            yield self.set_filesystem_permissions()
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
 
-            yield step_log('Adding instance to supervisor config')
-            yield self.configure_supervisor()
-
-        except StepError as error:
-            yield error.message
+        yield step_log('Adding instance to supervisor config')
+        yield self.configure_supervisor()

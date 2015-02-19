@@ -65,15 +65,14 @@ class ProcessHelper(object):
         return self.process_prefix + instance_name
 
     def get_status(self, instance_name):
-        instance = self.get_instance(instance_name)
         process_name = self.process_name(instance_name)
-        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+        supervisor = SupervisorControl(self.config)
 
         status = supervisor.status(process_name)
         result_status = OrderedDict()
         result_status['name'] = instance_name
         result_status['server'] = 'http://{}:{}'.format(self.config.server, self.config.supervisor.port)
-        result_status['status'] = status['status']
+        result_status['status'] = status['status'].lower()
         result_status['pid'] = status['pid']
         result_status['uptime'] = status['uptime']
         return result_status
@@ -81,10 +80,9 @@ class ProcessHelper(object):
     def start(self, instance_name):
         progress_log('Starting instance')
         status = self.get_status(instance_name)
-        instance = self.get_instance(instance_name)
 
         process_name = self.process_name(instance_name)
-        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+        supervisor = SupervisorControl(self.config)
 
         if status['status'] == 'unknown':
             padded_log('Unknown {} status ...')
@@ -95,27 +93,40 @@ class ProcessHelper(object):
             supervisor.start(process_name)
 
         padded_log('Waiting for process "{}" to start...'.format(process_name))
-        sleep(1)
 
+        retries = 10
         status = self.get_status(instance_name)
-        if status['status'].lower() == 'running':
+
+        while retries > 0 or status['status'] != 'running':
+            sleep(1)
+            status = self.get_status(instance_name)
+            retries -= 1
+
+        if status['status'] == 'running':
             padded_success('Process "{}" started'.format(process_name))
-        elif status['status'].lower() in ['fatal', 'backoff']:
+        elif status['status'] in ['fatal', 'backoff']:
             padded_error('Process "{}" not started, an error occurred'.format(process_name))
         else:
             padded_error('Process "{}" not started'.format(process_name))
 
     def stop(self, instance_name):
         progress_log('Stopping instance')
-        instance = self.get_instance(instance_name)
 
         process_name = self.process_name(instance_name)
-        supervisor = SupervisorControl(instance['supervisor_xmlrpc'])
+        supervisor = SupervisorControl(self.config)
 
         supervisor.stop(process_name)
 
         padded_log('Waiting for "{}" instance to stop...'.format(instance_name))
-        sleep(1)
+
+        retries = 10
+        status = self.get_status(instance_name)
+
+        while retries > 0 or status['status'] != 'stopped':
+            sleep(1)
+            status = self.get_status(instance_name)
+            retries -= 1
+
         status = self.get_status(instance_name)
         if status['status'].lower() == 'stopped':
             padded_success('Instance "{}" stopped'.format(instance_name))

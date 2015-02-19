@@ -111,8 +111,9 @@ class RemoteBuildoutHelper(object):
 
     # Methods to use external
 
-    def clone(self, repo):
-        code, stdout = self.remote.execute('git clone {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+    def clone(self, repo, branch):
+        code, stdout = self.remote.execute('git clone -b {} {} {}  --progress > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            branch,
             repo,
             self.folder)
         )

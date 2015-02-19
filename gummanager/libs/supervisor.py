@@ -22,7 +22,11 @@ def check_supervisor(func):
 
 
 class SupervisorControl(object):
-    def __init__(self, uri):
+    def __init__(self, config):
+        uri = 'http://admin:{}@{}:{}/RPC2'.format(
+            config.supervisor.password,
+            config.server,
+            config.supervisor.port)
         self.server = xmlrpclib.Server(uri)
 
     @check_supervisor
