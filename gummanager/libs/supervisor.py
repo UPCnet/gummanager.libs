@@ -4,6 +4,7 @@ from socket import error as SocketError
 
 import humanize
 import datetime
+import sys
 
 
 def check_supervisor(func):
@@ -65,4 +66,5 @@ class SupervisorControl(object):
         if instance_name in loaded_instances:
             self.server.supervisor.addProcessGroup(instance_name)
         else:
-            padded_log('No instance named "{}" found after reloading configuration'.format())
+            padded_error('No instance named "{}" found after reloading configuration'.format(instance_name))
+            sys.exit(1)

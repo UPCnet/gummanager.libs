@@ -242,8 +242,8 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             maxconfig = parse_ini_from(maxini)
             users = self.config.authorized_users
             default_security = {'roles': {"Manager": users}}
-            hosts = self.config.mongodb_cluster
-            replica_set = maxconfig['app:main']['mongodb.replica_set']
+            hosts = self.config.mongodb.cluster
+            replica_set = self.config.mongodb.replica_set
             conn = get_connection(hosts, replica_set)
             db_name = maxconfig['app:main']['mongodb.db_name']
             password = self.config.mongodb.password
