@@ -134,9 +134,6 @@ class OauthServer(ProcessHelper, TokenHelper, object):
         except StepError as error:
             yield error_log(error.message)
 
-
-
-
     # Steps
 
     def clone_buildout(self):
@@ -180,18 +177,18 @@ class OauthServer(ProcessHelper, TokenHelper, object):
             string=LDAP_INI,
             params={
                 'ldap': {
-                    'server': 'ldaps://{}'.format(self.config.ldap_config['server']),
-                    'password': self.config.ldap_config['branch_admin_password'],
+                    'server': 'ldaps://{}'.format(self.config.ldap.server),
+                    'password': self.config.ldap.branch_admin_password,
                     'userbind': 'cn={},ou={},{}'.format(
-                        self.config.ldap_config['branch_admin_cn'],
+                        self.config.ldap.branch_admin_cn,
                         self.instance.ldap,
-                        self.config.ldap_config['base_dn']),
+                        self.config.ldap.base_dn),
                     'userbasedn': 'ou={},{}'.format(
                         self.instance.ldap,
-                        self.config.ldap_config['base_dn']),
+                        self.config.ldap.base_dn),
                     'groupbasedn': 'ou=groups,ou={},{}'.format(
                         self.instance.ldap,
-                        self.config.ldap_config['base_dn'])
+                        self.config.ldap.base_dn)
                 }
             }
         )
