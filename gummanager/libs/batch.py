@@ -7,7 +7,7 @@ def make_subs(label):
     normalized_label = unicodedata.normalize('NFD', unicode(label)).encode('ascii', errors="ignore")
     if normalized_label in ['usuari', 'usuario', 'user', 'username']:
         return 'username'
-    elif normalized_label in ['nom', 'nombre', 'name', 'fullname']:
+    elif normalized_label in ['nom', 'nombre', 'name', 'fullname', 'displayname']:
         return 'fullname'
     elif normalized_label in ['mail', 'e-mail', 'email', 'correu', 'correo', 'correuelectronic', 'correoelectronico']:
         return 'email'
@@ -79,10 +79,10 @@ def read_xls(xlsfile, required_fields=[]):
     return sheets
 
 
-def read_csv(csvfile, required_fields=[]):
+def read_csv(csvfile, required_fields=[], separator=','):
     content = open(csvfile).read()
     lines = content.split('\n')
-    return lines
+    return [line.split(separator) for line in lines]
 
 
 def normalize_cols(row):
