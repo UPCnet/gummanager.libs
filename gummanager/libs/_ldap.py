@@ -75,12 +75,13 @@ class LdapServer(object):
         users = self.get_branch_users(branch)
         return len([a for a in users if a['name'] == username]) > 0
 
-    def cd_branch(self, branch_name, users=True):
+    def cd_branch(self, branch_name="", users=True):
         self.cd('/')
-        if users:
-            self.cd('ou=users,ou={}'.format(branch_name))
-        else:
-            self.cd('ou={}'.format(branch_name))
+        if branch_name:
+            if users:
+                self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
+            else:
+                self.cd('ou={}'.format(branch_name))
 
     def cd(self, dn):
         if dn == '/':
@@ -102,6 +103,14 @@ class LdapServer(object):
 
     @catch_ldap_errors
     def authenticate(self, username, password, branch=None, userdn=False):
+        """
+            Authenticates a user with a password.
+
+            If branch is not specified, will assume user lives on the root dn.
+            If branch is specified and userdn is False, will assume user lives on the branch dn.
+            If branch is specified and userdn is True, will assume user lives on branch's user dn.
+
+        """
         self.cd('/')
         if branch:
             self.cd_branch(branch, userdn)
@@ -156,9 +165,39 @@ class LdapServer(object):
         self.ld.add_s(dn, ldif)
 
     @catch_ldap_errors
-    def get_branch_users(self, branch_name, filter=None):
+    def get_branch_users(self, branch_name=None, filter=None):
         self.cd('/')
-        self.cd('ou=users,ou={}'.format(branch_name))
+
+        users_dn = self.config.branch_users_dn if branch_name is None else '{},ou={}'.format(self.config.branch_users_dn, branch_name)
+        self.cd(users_dn)
+
+        ldap_result_id = self.ld.search(
+            self.dn,
+            ldap.SCOPE_SUBTREE,
+            "cn=*",
+            None
+        )
+        result_set = []
+        while 1:
+            result_type, result_data = self.ld.result(ldap_result_id, 0)
+            if (result_data == []):
+                break
+            else:
+                if result_type == ldap.RES_SEARCH_ENTRY:
+                    entry = {
+                        'name': result_data[0][1]['cn'][0],
+                        'sn': result_data[0][1]['sn'][0]
+                    }
+                    if not filter or filter.lower() in entry['name'].lower() + entry['sn'].lower():
+                        result_set.append(entry)
+        return result_set
+
+    @catch_ldap_errors
+    def get_branch_group_users(self, branch_name, group_name, filter=None):
+        self.cd('/')
+
+        groups_dn = self.config.branch_groups_dn if branch_name is None else '{},ou={}'.format(self.config.branch_groups_dn, branch_name)
+        self.cd(groups_dn)
 
         ldap_result_id = self.ld.search(
             self.dn,
@@ -184,7 +223,7 @@ class LdapServer(object):
     @catch_ldap_errors
     def get_branch_groups(self, branch_name):
         self.cd('/')
-        self.cd('ou=groups,ou={}'.format(branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_groups_dn, branch_name))
         try:
             ldap_result_id = self.ld.search(
                 self.dn,
@@ -269,7 +308,7 @@ class LdapServer(object):
         self.add_ou('users')
 
         # Add plain users
-        self.cd('ou=users,ou={}'.format(branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
         for user in self.config.base_users:
             self.add_ldap_user(user.username, user.username, user.password)
 
@@ -293,7 +332,7 @@ class LdapServer(object):
             userdn=False)
 
         self.cd('/')
-        self.cd('ou=users,ou={}'.format(branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
         self.add_ldap_user(username, username, password)
 
         self.disconnect()
@@ -310,7 +349,7 @@ class LdapServer(object):
             userdn=False)
 
         self.cd('/')
-        self.cd('ou=users,ou={}'.format(branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
 
         try:
             users = read_users_file(usersfile, required_fields=['username', 'fullname', 'password'])
@@ -349,7 +388,7 @@ class LdapServer(object):
     def delete_user(self, branch_name, username):
         self.connect()
         self.cd('/')
-        self.cd('ou=users,ou={}'.format(branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
         self.del_user(username)
         self.disconnect()
         yield success_log("User {} deleted from branch".format(username))
