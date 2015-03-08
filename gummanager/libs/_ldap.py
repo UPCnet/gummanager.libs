@@ -106,19 +106,25 @@ class LdapServer(object):
         """
             Authenticates a user with a password.
 
-            If branch is not specified, will assume user lives on the root dn.
+            If branch is not specified, and userdns is False will assume user lives on the root dn.
+            If branch is not specified, and userdns is True will assume user lives on the root branch_users_dn.
             If branch is specified and userdn is False, will assume user lives on the branch dn.
             If branch is specified and userdn is True, will assume user lives on branch's user dn.
 
         """
         self.cd('/')
         if branch:
+
             self.cd_branch(branch, userdn)
             if userdn:
                 if not self.exists(username, branch):
                     raise StepError("User {} doesn't exists in branch {}".format(username, branch))
                 self.disconnect()
                 self.connect(auth=False)
+        else:
+            if userdn:
+                self.cd(self.config.branch_users_dn)
+
         user_dn = "cn={},{}".format(username, self.dn)
         self.ld.simple_bind_s(user_dn, password)
 
