@@ -37,7 +37,7 @@ setup(name='gummanager.libs',
           'python-ldap',
           'requests',
           'pyquery',
-          'sh == 1.09',
+          'sh',
           'configobj',
           'circus',
           'humanize',
@@ -46,7 +46,8 @@ setup(name='gummanager.libs',
           'utalk-python-client',
           'gevent',
           'xlrd',
-          'maxutils'
+          'maxutils',
+          'blessings'
       ],
       entry_points="""
       # -*- Entry points: -*-
