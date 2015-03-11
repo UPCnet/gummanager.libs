@@ -16,6 +16,7 @@ import hashlib
 import ldap
 import ldap.modlist as modlist
 import os
+import re
 
 
 def catch_ldap_errors(func):
@@ -90,10 +91,10 @@ class LdapServer(object):
             self.leaf_dn = dn
 
     @catch_ldap_errors
-    def connect(self, auth=True):
+    def connect(self, auth=True, **kwargs):
         self.ld = ldap.initialize(self.ldap_uri)
         if auth:
-            return self.authenticate(self.config.admin_cn, self.config.admin_password)
+            return self.authenticate(self.config.admin_cn, self.config.admin_password, **kwargs)
 
         return True
 
@@ -201,14 +202,13 @@ class LdapServer(object):
     @catch_ldap_errors
     def get_branch_group_users(self, branch_name, group_name, filter=None):
         self.cd('/')
-
         groups_dn = self.config.branch_groups_dn if branch_name is None else '{},ou={}'.format(self.config.branch_groups_dn, branch_name)
         self.cd(groups_dn)
 
         ldap_result_id = self.ld.search(
             self.dn,
             ldap.SCOPE_SUBTREE,
-            "cn=*",
+            "cn={}".format(group_name),
             None
         )
         result_set = []
@@ -218,12 +218,7 @@ class LdapServer(object):
                 break
             else:
                 if result_type == ldap.RES_SEARCH_ENTRY:
-                    entry = {
-                        'name': result_data[0][1]['cn'][0],
-                        'sn': result_data[0][1]['sn'][0]
-                    }
-                    if not filter or filter.lower() in entry['name'].lower() + entry['sn'].lower():
-                        result_set.append(entry)
+                    result_set += [re.match("cn=(.*?),.*", member).groups()[0] for member in result_data[0][1].get('member')]
         return result_set
 
     @catch_ldap_errors
