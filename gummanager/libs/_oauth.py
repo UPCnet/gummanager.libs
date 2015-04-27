@@ -170,7 +170,7 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
     @command
     def new_instance(self, instance_name, port_index, ldap_branch=None, logecho=None):
 
-        self.buildout.cfgfile = 'osiris-only.cfg'
+        self.buildout.cfgfile = self.config.oauth.cfg_file
         self.buildout.logecho = logecho
         self.buildout.folder = '{}/{}'.format(
             self.config.instances_root,

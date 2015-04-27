@@ -117,7 +117,6 @@ class RemoteBuildoutHelper(object):
             repo,
             self.folder)
         )
-
         file_exists = self.remote.file_exists('{}/bootstrap.py'.format(self.folder))
         if not(code == 0 and file_exists):
             raise StepError('Error on cloning {}'.format(repo))

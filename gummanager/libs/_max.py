@@ -237,7 +237,6 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
             # Force read the new configuration files
             self.buildout.reload()
-
             maxini = self.buildout.config_files[self.instance.name]['max.ini']
             maxconfig = parse_ini_from(maxini)
             users = self.config.authorized_users
@@ -247,7 +246,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             conn = get_connection(hosts, replica_set)
             db_name = maxconfig['app:main']['mongodb.db_name']
             password = self.config.mongodb.password
-            db = get_database(conn, db_name, username='admin', password=password, authdb='admin')
+            db = get_database(conn, db_name, username=self.config.mongodb.username, password=password, authdb=self.config.mongodb.authdb)
 
             if not [items for items in db.security.find({})]:
                 db.security.insert(default_security)
@@ -321,7 +320,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
     @command
     def new_instance(self, instance_name, port_index, oauth_instance=None, logecho=None, rabbitmq_url=None):
 
-        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.cfgfile = self.config.max.cfg_file
         self.buildout.logecho = logecho
         self.buildout.folder = '{}/{}'.format(
             self.config.instances_root,
@@ -372,7 +371,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
     @command
     def upgrade(self, instance_name, logecho=None):
-        self.buildout.cfgfile = 'max-only.cfg'
+        self.buildout.cfgfile = self.config.max.cfg_file
         self.buildout.logecho = logecho
         self.buildout.folder = '{}/{}'.format(
             self.config.instances_root,
