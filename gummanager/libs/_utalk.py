@@ -22,14 +22,6 @@ class UTalkServer(TokenHelper, object):
         self.config = config
         self.remote = RemoteConnection(self.config.maxbunny.ssh_user, self.config.maxbunny.server)
 
-    def getDomainInfo(self, domain):
-        max_info = self.config.max.get_instance(domain)
-        oauth_info = self.config.oauth.instance_by_dns(max_info['oauth'])
-        return {
-            'max': max_info,
-            'oauth': oauth_info
-        }
-
     def getUtalkClient(self, maxserver, username, password, quiet=False):
         client = UTalkTestClient(
             maxserver=maxserver,
@@ -39,7 +31,7 @@ class UTalkServer(TokenHelper, object):
         )
         return client
 
-    def add_entry(self, configuration):
+    def add_entry(self, **configuration):
         instances_file = ''
         if self.remote.file_exists(self.config.maxbunny.instances_list):
             instances_file = self.remote.get_file(self.config.maxbunny.instances_list, do_raise=True)
@@ -53,19 +45,23 @@ class UTalkServer(TokenHelper, object):
         return success_log("Succesfully added {name} to maxbunny instance list".format(**configuration))
 
     def add_instance(self, **configuration):
-        domain_info = self.getDomainInfo(configuration['name'])
-        ldap_branch = domain_info['oauth']['ldap']['branch']
-        configuration['restricted_user_token'] = 'aaa'
-
-        self.get_token(
-            configuration['oauth_server'],
+        ldap_branch = configuration['oauthserver']['ldap']['branch']
+        token = self.get_token(
+            configuration['oauthserver']['server']['dns'],
             configuration['restricted_user'],
             admin_password_for_branch(ldap_branch)
         )
 
         try:
             yield step_log('Adding entry')
-            yield self.add_entry(configuration)
+            yield self.add_entry(
+                language=configuration['language'],
+                name=configuration['name'],
+                hashtag=configuration['hashtag'],
+                server=configuration['maxserver']['server']['dns'],
+                restricted_user = configuration['restricted_user'],
+                restricted_user_token = token
+            )
 
         except StepError as error:
             yield error_log(error.message)
