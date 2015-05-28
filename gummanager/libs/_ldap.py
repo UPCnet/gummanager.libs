@@ -61,6 +61,8 @@ class LdapServer(object):
         self.config = config
         self.set_server()
         self.branch = None
+        self.user_scope = getattr(ldap, self.config.user_scope, 'SCOPE_SUBTREE')
+        self.group_scope = getattr(ldap, self.config.group_scope, 'SCOPE_SUBTREE')
 
     def ssha(self, password):
 
@@ -79,11 +81,12 @@ class LdapServer(object):
     def set_branch(self, branch):
         self.branch = branch
 
+        self.branch_dn = 'ou={},{}'.format(branch, self.config.branches.base_dn)
         self.users_dn = self.dn_from_branch(self.config.users_base_dn, branch)
         self.groups_dn = self.dn_from_branch(self.config.group_base_dn, branch)
 
         if self.config.branches.enabled:
-            self.effective_admin_dn = self.config.branches.admin_dn.format(branch=branch)
+            self.effective_admin_dn = 'cn={admin_cn},ou={branch},{base_dn}'.format(branch=branch, **self.config.branches)
             self.effective_admin_password = self.config.branches.admin_password
         else:
             self.effective_admin_dn = self.admin_dn
@@ -149,12 +152,9 @@ class LdapServer(object):
         """
         self.ld.simple_bind_s(username, password)
 
-        # self.cd(self.config.branch_users_dn)
-
         # if not self.exists(username):
         #     raise StepError("User {} doesn't exists in branch {}".format(username, branch))
 
-        #     self.cd_branch(branch, userdn)
         #     if userdn:
         #         if not self.exists(username, branch):
         #             raise StepError("User {} doesn't exists in branch {}".format(username, branch))
@@ -180,15 +180,14 @@ class LdapServer(object):
 
     @catch_ldap_errors
     def add_ldap_user_by_dn(self, dn, fullname, password):
-
-        cn, where = re.search(r'cn=(.*?),(.*)', dn).groups()
+        cn = re.search(r'cn=(.*?)', dn).groups()[0]
         ldif = modlist.addModlist({
             'objectclass': ['top', 'organizationalPerson', 'person', 'inetOrgPerson'],
             'cn': cn.encode('utf-8'),
             'sn': fullname.encode('utf-8'),
             'userPassword': self.ssha(password.encode('utf-8'))
         })
-        self.ld.add_s(where, ldif)
+        self.ld.add_s(dn, ldif)
 
     def add_ldap_user(self, username, fullname, password):
         """
@@ -209,7 +208,7 @@ class LdapServer(object):
     def add_group(self, name, where, users=[]):
         """
         """
-        dn = 'cn={},{}'.format(name, self.dn)
+        dn = 'cn={},{}'.format(name, where)
 
         members = ['cn={},{}'.format(username, where) for username in users]
         ldif = modlist.addModlist({
@@ -224,7 +223,7 @@ class LdapServer(object):
         branch = self.branch if branch_name is None else branch_name
         ldap_result_id = self.ld.search(
             self.dn_from_branch(self.config.users_base_dn, branch),
-            ldap.SCOPE_SUBTREE,
+            self.user_scope,
             "cn=*",
             None
         )
@@ -246,11 +245,10 @@ class LdapServer(object):
     @catch_ldap_errors
     def get_branch_group_users(self, branch_name, group_name, filter=None):
         groups_dn = self.config.branch_groups_dn if branch_name is None else '{},ou={}'.format(self.config.branch_groups_dn, branch_name)
-        self.cd(groups_dn)
 
         ldap_result_id = self.ld.search(
-            self.dn,
-            ldap.SCOPE_SUBTREE,
+            groups_dn,
+            self.user_scope,
             "cn={}".format(group_name),
             None
         )
@@ -269,7 +267,7 @@ class LdapServer(object):
         try:
             ldap_result_id = self.ld.search(
                 self.dn_from_branch(self.config.group_base_dn, branch),
-                ldap.SCOPE_SUBTREE,
+                self.group_scope,
                 "cn=*",
                 None
             )
@@ -290,7 +288,7 @@ class LdapServer(object):
 
     def get_branch(self, branch_name):
         groups = self.get_branch_groups(branch_name)
-        users = self.get_branch_users(branch=branch_name)
+        users = self.get_branch_users(branch_name=branch_name)
         instance = OrderedDict()
         instance['name'] = branch_name
         instance['groups'] = groups
@@ -340,17 +338,20 @@ class LdapServer(object):
         self.connect()
         self.add_ou(branch, self.config.branches.base_dn)
 
-        branch_restricted_user_dn = 'cn=restricted,{}'.format(self.config.branches.base_dn)
         self.set_branch(branch)
-        self.add_ldap_user_by_dn(self.config.branches.admin_dn, 'LDAP Access User', self.config.branches.admin_password)
+
+        branch_restricted_user_dn = 'cn={restricted_cn},{branch}'.format(branch=self.branch_dn, **self.config.branches)
+        branch_admin_user_dn = 'cn={admin_cn},{branch}'.format(branch=self.branch_dn, **self.config.branches)
+        self.set_branch(branch)
+        self.add_ldap_user_by_dn(branch_admin_user_dn, 'LDAP Access User', self.config.branches.admin_password)
         self.add_ldap_user_by_dn(branch_restricted_user_dn, 'Restricted User', admin_password_for_branch(branch))
 
-        self.add_group('Managers', self.config.branches.base_dn, ['ldap'])
-        self.add_ou('groups', self.config.branches.base_dn)
-        self.add_ou('users', self.config.branches.base_dn)
+        self.add_group('Managers', self.branch_dn, [self.config.branches.admin_cn])
+        self.add_ou('groups', self.branch_dn)
+        self.add_ou('users', self.branch_dn)
 
         # Add plain users
-        for user in self.config.base_users:
+        for user in self.config.branches.base_users:
             self.add_ldap_user(user.username, user.username, user.password)
 
         self.disconnect()
@@ -383,8 +384,6 @@ class LdapServer(object):
         self.authenticate(
             username=self.effective_admin_dn,
             password=self.effective_admin_password)
-
-        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch))
 
         try:
             users = read_users_file(usersfile, required_fields=['username', 'fullname', 'password'])
