@@ -244,7 +244,7 @@ class LdapServer(object):
 
     @catch_ldap_errors
     def get_branch_group_users(self, branch_name, group_name, filter=None):
-        groups_dn = self.config.branch_groups_dn if branch_name is None else '{},ou={}'.format(self.config.branch_groups_dn, branch_name)
+        groups_dn = self.dn_from_branch(self.config.group_base_dn, branch_name)
 
         ldap_result_id = self.ld.search(
             groups_dn,
