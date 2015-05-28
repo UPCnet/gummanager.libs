@@ -15,8 +15,14 @@ import base64
 import hashlib
 import ldap
 import ldap.modlist as modlist
+from ldapurl import LDAPUrl
 import os
 import re
+
+PORTS_SCHEME_MAPPING = {
+    636: 'ldaps://',
+    389: 'ldap://'
+}
 
 
 def catch_ldap_errors(func):
@@ -53,133 +59,171 @@ class LdapServer(object):
     def __init__(self, config, *args, **kwargs):
 
         self.config = config
-
-        self.set_server(**self.config)
-        self.leaf_dn = ''
-
-    @property
-    def dn(self):
-        base_dn = self.config.base_dn
-        if self.leaf_dn:
-            base_dn = '{},{}'.format(self.leaf_dn, self.config.base_dn)
-        return base_dn
+        self.set_server()
+        self.branch = None
 
     def ssha(self, password):
 
         salt = os.urandom(16)
         return '{ssha}' + base64.b64encode(hashlib.sha1(password + salt).digest() + salt)
 
-    def set_server(self, **params):
-        self.ldap_uri = 'ldaps://{server}:{port}'.format(**params)
+    def dn_from_branch(self, dn, branch):
+        return dn.format(branch=branch)
 
-    def exists(self, username, branch):
-        users = self.get_branch_users(branch)
-        return len([a for a in users if a['name'] == username]) > 0
+    def dn_from_username(self, username):
+        return 'cn={},{}'.format(username, self.users_dn)
 
-    def cd_branch(self, branch_name="", users=True):
-        self.cd('/')
-        if branch_name:
-            if users:
-                self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
-            else:
-                self.cd('ou={}'.format(branch_name))
+    def dn_from_groupname(self, groupname):
+        return 'cn={},{}'.format(groupname, self.groups_dn)
 
-    def cd(self, dn):
-        if dn == '/':
-            self.leaf_dn = ''
+    def set_branch(self, branch):
+        self.branch = branch
+
+        self.users_dn = self.dn_from_branch(self.config.users_base_dn, branch)
+        self.groups_dn = self.dn_from_branch(self.config.group_base_dn, branch)
+
+        if self.config.branches.enabled:
+            self.effective_admin_dn = self.config.branches.admin_dn.format(branch=branch)
+            self.effective_admin_password = self.config.branches.admin_password
         else:
-            self.leaf_dn = dn
+            self.effective_admin_dn = self.admin_dn
+            self.effective_admin_password = self.admin_password
+
+    def set_server(self):
+        """
+            Sanity parse & check of ldap uri and sets a valid expected url
+        """
+        clean_url = self.config.server.strip()
+
+        # Set a safe default for ldap protocol if missing
+        if not re.match(r'ldaps?://', clean_url):
+            # Search for specified port and fallback to standard if missing
+            matchport = re.search(r':(\d+)')
+            if not matchport:
+                port = 389
+            else:
+                port = int(matchport.groups(0))
+
+            # Set the schema based on standar ports, fallback to standard if
+            # port doesn't match any of standar ports
+            scheme = PORTS_SCHEME_MAPPING.get(port, 'ldap://')
+            ldap_uri = scheme + clean_url
+        else:
+            ldap_uri = clean_url
+
+        ldapurl = LDAPUrl(ldap_uri)
+        self.ldap_uri = '{urlscheme}://{hostport}'.format(**ldapurl.__dict__)
+
+    def exists(self, username):
+        users = self.get_branch_users()
+        return len([a for a in users if a['name'] == username]) > 0
 
     @catch_ldap_errors
     def connect(self, auth=True, **kwargs):
+        """
+            Connect to ldap and optionallly bind
+
+            After initialization, if auth=True, a bind will be performed using the
+            base admin credentials. If you want to authenticate with other credentials
+            set auth=False and do the authentication later.
+        """
         self.ld = ldap.initialize(self.ldap_uri)
         if auth:
-            return self.authenticate(self.config.admin_cn, self.config.admin_password, **kwargs)
+            return self.authenticate(
+                username=self.config.admin_dn,
+                password=self.config.admin_password,
+                **kwargs)
 
         return True
 
     @catch_ldap_errors
     def disconnect(self):
+        """
+            Unbinds and disconnects the ldap server connection
+        """
         self.ld.unbind_s()
 
     @catch_ldap_errors
-    def authenticate(self, username, password, branch=None, userdn=False):
+    def authenticate(self, username, password):
         """
-            Authenticates a user with a password.
-
-            If branch is not specified, and userdns is False will assume user lives on the root dn.
-            If branch is not specified, and userdns is True will assume user lives on the root branch_users_dn.
-            If branch is specified and userdn is False, will assume user lives on the branch dn.
-            If branch is specified and userdn is True, will assume user lives on branch's user dn.
-
         """
-        self.cd('/')
-        if branch:
+        self.ld.simple_bind_s(username, password)
 
-            self.cd_branch(branch, userdn)
-            if userdn:
-                if not self.exists(username, branch):
-                    raise StepError("User {} doesn't exists in branch {}".format(username, branch))
-                self.disconnect()
-                self.connect(auth=False)
-        else:
-            if userdn:
-                self.cd(self.config.branch_users_dn)
+        # self.cd(self.config.branch_users_dn)
 
-        user_dn = "cn={},{}".format(username, self.dn)
-        self.ld.simple_bind_s(user_dn, password)
+        # if not self.exists(username):
+        #     raise StepError("User {} doesn't exists in branch {}".format(username, branch))
+
+        #     self.cd_branch(branch, userdn)
+        #     if userdn:
+        #         if not self.exists(username, branch):
+        #             raise StepError("User {} doesn't exists in branch {}".format(username, branch))
+        #         self.disconnect()
+        #         self.connect(auth=False)
+        # else:
+        #     if userdn:
+        #         self.cd(self.config.branch_users_dn)
+
+        # user_dn = "cn={},{}".format(username, self.dn)
+        # self.ld.simple_bind_s(user_dn, password)
 
     @catch_ldap_errors
-    def add_ou(self, ou_name):
-        dn = 'ou={},{}'.format(ou_name, self.dn)
+    def add_ou(self, name, where):
+        dn = 'ou={},{}'.format(name, where)
 
         ldif = modlist.addModlist({
             'objectclass': ['top', 'organizationalUnit'],
-            'ou': ou_name,
-            'description': ou_name
+            'ou': name,
+            'description': name
         })
         self.ld.add_s(dn, ldif)
 
     @catch_ldap_errors
-    def add_ldap_user(self, username, fullname, password, **kwargs):
-        dn = 'cn={},{}'.format(username, self.dn)
+    def add_ldap_user_by_dn(self, dn, fullname, password):
 
+        cn, where = re.search(r'cn=(.*?),(.*)', dn).groups()
         ldif = modlist.addModlist({
             'objectclass': ['top', 'organizationalPerson', 'person', 'inetOrgPerson'],
-            'cn': username.encode('utf-8'),
+            'cn': cn.encode('utf-8'),
             'sn': fullname.encode('utf-8'),
             'userPassword': self.ssha(password.encode('utf-8'))
         })
-        self.ld.add_s(dn, ldif)
+        self.ld.add_s(where, ldif)
+
+    def add_ldap_user(self, username, fullname, password):
+        """
+            Inserts a new user into the current users dn
+        """
+        dn = 'cn={},{}'.format(username, self.users_dn)
+        self.add_ldap_user_by_dn(dn, fullname, password)
 
     @catch_ldap_errors
-    def del_user(self, user_name):
-        dn = 'cn={},{}'.format(user_name, self.dn)
-        self.ld.delete_s(dn)
+    def del_user(self, username):
+        """
+            Deletes a user frmo the current users dn
+        """
+        user_dn = self.dn_from_username(username)
+        self.ld.delete_s(user_dn)
 
     @catch_ldap_errors
-    def add_group(self, group_name, users=[]):
-        dn = 'cn={},{}'.format(group_name, self.dn)
+    def add_group(self, name, where, users=[]):
+        """
+        """
+        dn = 'cn={},{}'.format(name, self.dn)
 
-        members = []
-        members.append('cn={},{}'.format('ldap', self.dn))
-
+        members = ['cn={},{}'.format(username, where) for username in users]
         ldif = modlist.addModlist({
             'objectclass': ['top', 'groupOfNames'],
-            'cn': group_name,
+            'cn': name,
             'member': members
         })
         self.ld.add_s(dn, ldif)
 
     @catch_ldap_errors
-    def get_branch_users(self, branch_name=None, filter=None):
-        self.cd('/')
-
-        users_dn = self.config.branch_users_dn if branch_name is None else '{},ou={}'.format(self.config.branch_users_dn, branch_name)
-        self.cd(users_dn)
-
+    def get_branch_users(self, filter=None, branch_name=None):
+        branch = self.branch if branch_name is None else branch_name
         ldap_result_id = self.ld.search(
-            self.dn,
+            self.dn_from_branch(self.config.users_base_dn, branch),
             ldap.SCOPE_SUBTREE,
             "cn=*",
             None
@@ -191,17 +235,16 @@ class LdapServer(object):
                 break
             else:
                 if result_type == ldap.RES_SEARCH_ENTRY:
-                    entry = {
-                        'name': result_data[0][1]['cn'][0],
-                        'sn': result_data[0][1]['sn'][0]
-                    }
+                    # SN fallback to CN if not present
+                    cn = result_data[0][1]['cn'][0]
+                    sn = result_data[0][1].get('sn', [cn])[0]
+                    entry = {'name': cn, 'sn': sn}
                     if not filter or filter.lower() in entry['name'].lower() + entry['sn'].lower():
                         result_set.append(entry)
         return result_set
 
     @catch_ldap_errors
     def get_branch_group_users(self, branch_name, group_name, filter=None):
-        self.cd('/')
         groups_dn = self.config.branch_groups_dn if branch_name is None else '{},ou={}'.format(self.config.branch_groups_dn, branch_name)
         self.cd(groups_dn)
 
@@ -222,12 +265,10 @@ class LdapServer(object):
         return result_set
 
     @catch_ldap_errors
-    def get_branch_groups(self, branch_name):
-        self.cd('/')
-        self.cd('{},ou={}'.format(self.config.branch_groups_dn, branch_name))
+    def get_branch_groups(self, branch):
         try:
             ldap_result_id = self.ld.search(
-                self.dn,
+                self.dn_from_branch(self.config.group_base_dn, branch),
                 ldap.SCOPE_SUBTREE,
                 "cn=*",
                 None
@@ -249,7 +290,7 @@ class LdapServer(object):
 
     def get_branch(self, branch_name):
         groups = self.get_branch_groups(branch_name)
-        users = self.get_branch_users(branch_name)
+        users = self.get_branch_users(branch=branch_name)
         instance = OrderedDict()
         instance['name'] = branch_name
         instance['groups'] = groups
@@ -259,7 +300,7 @@ class LdapServer(object):
     @catch_ldap_errors
     def get_branches(self):
         ldap_result_id = self.ld.search(
-            self.config.base_dn,
+            self.config.branches.base_dn,
             ldap.SCOPE_ONELEVEL,
             "ou=*",
             None
@@ -295,26 +336,25 @@ class LdapServer(object):
     # Commands
 
     @command
-    def add_branch(self, branch_name):
+    def add_branch(self, branch):
         self.connect()
+        self.add_ou(branch, self.config.branches.base_dn)
 
-        self.cd('/')
-        self.add_ou(branch_name)
-        self.cd('ou={}'.format(branch_name))
-        self.add_ldap_user(self.config.branch_admin_cn, 'LDAP Access User', self.config.branch_admin_password)
-        self.add_ldap_user('restricted', 'Restricted User', admin_password_for_branch(branch_name))
+        branch_restricted_user_dn = 'cn=restricted,{}'.format(self.config.branches.base_dn)
+        self.set_branch(branch)
+        self.add_ldap_user_by_dn(self.config.branches.admin_dn, 'LDAP Access User', self.config.branches.admin_password)
+        self.add_ldap_user_by_dn(branch_restricted_user_dn, 'Restricted User', admin_password_for_branch(branch))
 
-        self.add_group('Managers')
-        self.add_ou('groups')
-        self.add_ou('users')
+        self.add_group('Managers', self.config.branches.base_dn, ['ldap'])
+        self.add_ou('groups', self.config.branches.base_dn)
+        self.add_ou('users', self.config.branches.base_dn)
 
         # Add plain users
-        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
         for user in self.config.base_users:
             self.add_ldap_user(user.username, user.username, user.password)
 
         self.disconnect()
-        yield success_log("Branch {} successfully created".format(branch_name))
+        yield success_log("Branch {} successfully created".format(branch))
 
     @command
     def list_branches(self):
@@ -324,33 +364,27 @@ class LdapServer(object):
         yield return_value(branches)
 
     @command
-    def add_user(self, branch_name, username, password):
+    def add_user(self, branch, username, password):
+        self.set_branch(branch)
         self.connect(auth=False)
         self.authenticate(
-            username=self.config.branch_admin_cn,
-            password=self.config.branch_admin_password,
-            branch=branch_name,
-            userdn=False)
-
-        self.cd('/')
-        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
+            username=self.effective_admin_dn,
+            password=self.effective_admin_password,
+        )
         self.add_ldap_user(username, username, password)
-
         self.disconnect()
 
         yield success_log("User {} successfully added".format(username))
 
     @command
-    def add_users(self, branch_name, usersfile):
+    def add_users(self, branch, usersfile):
+        self.set_branch(branch)
         self.connect(auth=False)
         self.authenticate(
-            username=self.config['branch_admin_cn'],
-            password=self.config['branch_admin_password'],
-            branch=branch_name,
-            userdn=False)
+            username=self.effective_admin_dn,
+            password=self.effective_admin_password)
 
-        self.cd('/')
-        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
+        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch))
 
         try:
             users = read_users_file(usersfile, required_fields=['username', 'fullname', 'password'])
@@ -379,24 +413,25 @@ class LdapServer(object):
         self.disconnect()
 
     @command
-    def list_users(self, branch_name, filter):
+    def list_users(self, branch, filter):
+        self.set_branch(branch)
         self.connect()
-        users = self.get_branch_users(branch_name, filter=filter)
+        users = self.get_branch_users(filter=filter)
         self.disconnect()
         yield return_value(users)
 
     @command
-    def delete_user(self, branch_name, username):
+    def delete_user(self, branch, username):
+        self.set_branch(branch)
         self.connect()
-        self.cd('/')
-        self.cd('{},ou={}'.format(self.config.branch_users_dn, branch_name))
         self.del_user(username)
         self.disconnect()
         yield success_log("User {} deleted from branch".format(username))
 
     @command
     def check_user(self, branch, username, password):
+        self.set_branch(branch)
         self.connect()
-        self.authenticate(username, password, branch=branch, userdn=True)
+        self.authenticate(self.dn_from_username(username), password)
         self.disconnect()
         yield success_log("User {} exists and matches provided password".format(username))
