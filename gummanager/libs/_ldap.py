@@ -101,7 +101,7 @@ class LdapServer(object):
         # Set a safe default for ldap protocol if missing
         if not re.match(r'ldaps?://', clean_url):
             # Search for specified port and fallback to standard if missing
-            matchport = re.search(r':(\d+)')
+            matchport = re.search(r':(\d+)', clean_url)
             if not matchport:
                 port = 389
             else:
