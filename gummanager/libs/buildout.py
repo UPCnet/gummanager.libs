@@ -96,6 +96,11 @@ class RemoteBuildoutHelper(object):
         if match:
             return 'conflict'
 
+        # First: search for untracked
+        match = re.search(r"Untracked files", stdout, re.IGNORECASE)
+        if match:
+            return 'untracked'
+
         # Second: search for a uncommitted status
         match = re.search(r"you are still merging", stdout, re.IGNORECASE)
         if match:
@@ -166,20 +171,26 @@ class RemoteBuildoutHelper(object):
         return code == 0
 
     def commit_to_local_branch(self, git_branch_name, files=[]):
-        code, stdout = self.remote.execute('cd {} && git checkout -b {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
-            self.folder,
-            git_branch_name),
-            do_raise=True
-        )
-        success = self.add(files)
-        if not success:
-            raise StepError('Error adding Files')
+        code = 0
+        stdout = 'branch {} already created'.format(git_branch_name)
+        commit_log = 'No files to commit'
+        if not self.current_branch == git_branch_name:
+            code, stdout = self.remote.execute('cd {} && git checkout -b {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+                self.folder,
+                git_branch_name),
+                do_raise=True
+            )
+        success = True
+        if not self.status == "clean":
+            success = self.add(files)
+            if not success:
+                raise StepError('Error adding Files')
 
-        success = self.current_branch == git_branch_name
-        if success:
-            commit_log = self.commit()
+            success = self.current_branch == git_branch_name
+            if success:
+                commit_log = self.commit()
 
-        success = self.status == "clean"
+            success = self.status == "clean"
         if not(code == 0 and success):
             raise StepError('Error when commiting to local branch')
         return commit_log + padded_log(stdout, filters=['Switched', 'M\t'], print_stdout=False)

@@ -4,6 +4,7 @@ import json
 from gummanager.libs.supervisor import SupervisorControl
 from gummanager.libs.utils import progress_log
 from gummanager.libs.utils import padded_error
+from gummanager.libs.utils import skippable_error_log
 from gummanager.libs.utils import padded_log
 from gummanager.libs.utils import padded_success
 from gummanager.libs.utils import error_log
@@ -24,7 +25,7 @@ class CommonSteps(object):
     def clone_buildout(self):
 
         if self.remote.file_exists('{}'.format(self.buildout.folder)):
-            return error_log('Folder {} already exists'.format(self.buildout.folder))
+            return skippable_error_log('Folder {} already exists'.format(self.buildout.folder))
 
         return success(
             self.buildout.clone(self.config.maxserver_buildout_uri, self.config.maxserver_buildout_branch),
@@ -45,7 +46,9 @@ class CommonSteps(object):
 
         customizations = {
             'mongo-auth': {
-                'password': self.config.mongodb.password,
+                'authdb': self.config.mongodb.authdb,
+                'username': self.config.mongodb.username,
+                'password': self.config.mongodb.password
             },
         }
 

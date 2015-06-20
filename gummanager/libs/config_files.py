@@ -43,7 +43,7 @@ OSIRIS_NGINX_ENTRY = """
         proxy_redirect off;
         rewrite ^/{instance_name}/(.*) /$1 break;
 
-        proxy_pass   http://{server_dns}:{osiris_port};
+        proxy_pass   http://{server}:{osiris_port};
     }}
 """
 
@@ -69,7 +69,7 @@ MAX_NGINX_ENTRY = """
         proxy_redirect off;
         rewrite ^/{instance_name}/(.*) /{instance_name}/$1 break;
 
-        proxy_pass    http://{server_dns}:{bigmax_port};
+        proxy_pass    http://{server}:{bigmax_port};
      }}
 
     location ~ ^/{instance_name}/(.*) {{
@@ -90,7 +90,7 @@ MAX_NGINX_ENTRY = """
         proxy_redirect off;
         rewrite ^/{instance_name}/(.*) /$1 break;
 
-        proxy_pass   http://{server_dns}:{max_port};
+        proxy_pass   http://{server}:{max_port};
     }}
 """
 

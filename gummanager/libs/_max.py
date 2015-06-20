@@ -2,7 +2,7 @@
 from maxclient.rest import MaxClient
 from maxutils.mongodb import get_connection
 from maxutils.mongodb import get_database
-
+from maxcarrot import RabbitClient
 from collections import OrderedDict
 from gevent.event import AsyncResult
 from gummanager.libs.buildout import RemoteBuildoutHelper
@@ -28,6 +28,7 @@ from gummanager.libs.utils import success
 from gummanager.libs.utils import success_log
 from time import sleep
 
+import datetime
 import gevent
 import re
 import requests
@@ -250,6 +251,25 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
             if not [items for items in db.security.find({})]:
                 db.security.insert(default_security)
+
+            server = RabbitClient(maxconfig['app:main']['max.rabbitmq'])
+            server.declare()
+
+            # Create default users
+            for username in users:
+                if not db.users.find_one({'username': username}):
+                    db.users.insert({
+                        'username': username,
+                        '_owner': username,
+                        '_creator': username,
+                        'objectType': 'person',
+                        'subscribedTo': [],
+                        'following': [],
+                        'talkingIn': [],
+                        'published': datetime.datetime.utcnow()})
+                server.create_user(username)
+
+            server.disconnect()
         except:
             return error_log("Error on setting permissions settings")
         return success_log("Succesfully changed permissions settings")
@@ -258,14 +278,17 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
         nginx_params = {
             'instance_name': self.instance.name,
+            'server': self.config.server,
             'server_dns': self.config.server_dns,
             'bigmax_port': BIGMAX_BASE_PORT,
             'max_port': int(self.instance.index) + MAX_BASE_PORT
         }
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
-        nginx_file_location = "{}/config/max-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-        self.remote.put_file(nginx_file_location, nginxentry)
+        nginx_remote = RemoteConnection(self.config.nginx.ssh_user, self.config.nginx.server)
+
+        nginx_file_location = "{}/config/max-instances/{}.conf".format(self.config.nginx.root, self.instance.name)
+        nginx_remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
     def commit_local_changes(self):
@@ -294,7 +317,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
         return success_log("Succesfully added {} to bigmax instance list".format(self.instance.name))
 
     def update_buildout(self):
-        result = self.buildout.upgrade('master', self.config.local_git_branch)
+        result = self.buildout.upgrade(self.config.maxserver_buildout_branch, self.config.local_git_branch)
         return success(result, "Succesfully commited local changes")
 
     def reload_instance(self):
@@ -365,9 +388,6 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
 
         yield step_log('Adding instance to supervisor config')
         yield self.configure_supervisor()
-
-        yield step_log('Adding instance to bigmax')
-        yield self.add_instance_to_bigmax()
 
     @command
     def upgrade(self, instance_name, logecho=None):

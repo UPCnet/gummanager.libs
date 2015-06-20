@@ -47,7 +47,8 @@ setup(name='gummanager.libs',
           'gevent',
           'xlrd',
           'maxutils',
-          'blessings'
+          'blessings',
+          'maxcarrot'
       ],
       entry_points="""
       # -*- Entry points: -*-

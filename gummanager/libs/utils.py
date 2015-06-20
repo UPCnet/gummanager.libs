@@ -108,6 +108,13 @@ def error_log(message):
         return message
 
 
+def skippable_error_log(message):
+    if isinstance(message, str):
+        return (6, message)
+    else:
+        return message
+
+
 def raising_error_log(message):
     if isinstance(message, str):
         return (4, message)

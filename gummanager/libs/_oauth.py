@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from collections import OrderedDict
-from collections import namedtuple
 from gummanager.libs.buildout import RemoteBuildoutHelper
 from gummanager.libs.config_files import LDAP_INI
 from gummanager.libs.config_files import OSIRIS_NGINX_ENTRY
@@ -73,14 +72,31 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         try:
             yield step_log('Testing oauth server @ {}'.format(instance['server']['dns']))
 
-            yield message_log('Checking server is online "{}"')
-            status = requests.get(instance['server']['dns']).status_code
-            if status == 404:
-                yield error_log('There''s no oauth server at {}. Chech there''s an nginx entry for this server.'.format(instance['server']['dns']))
-            elif status == 502:
-                yield error_log('Server not respoding at {}. Check osiris process is running.'.format(instance['server']['dns']))
+            yield message_log('Checking server health')
+
+            try:
+                status = requests.get(instance['server']['dns'], verify=True).status_code
+            except requests.exceptions.SSLError:
+                yield error_log('SSL certificate verification failed')
+                yield message_log('Continuing test without certificate check')
+
+            try:
+                status = requests.get(instance['server']['dns'], verify=False).status_code
+            except requests.ConnectionError:
+                yield error_log('Connection error, check nginx is running, and dns resolves as expected.')
+            except:
+                yield error_log('Unknown error trying to access oauth server. Check params and try again')
             else:
-                yield error_log('Server {} responded with {}. Check osiris configuration.'.format(instance['server']['dns']))
+                if status == 500:
+                    yield error_log('Error on oauth server, Possible causes:\n  - ldap configuration error (bad server url?)\n  - Mongodb configuration error (bad replicaset name or hosts list?)\nCheck osiris log for more information.')
+                elif status == 502:
+                    yield error_log('Server not respoding at {}. Check that:\n  - osiris process is running\n  - nginx upstream definition is pointing to the right host:port.'.format(instance['server']['dns']))
+                elif status == 504:
+                    yield error_log('Gateway timeout. Probably oauth server is giving timeout trying to contact ldap server')
+                elif status == 404:
+                    yield error_log('There''s no oauth server at {}. Chech there''s an nginx entry for this server.'.format(instance['server']['dns']))
+                elif status != 200:
+                    yield error_log('Server {} responded with {} code. Check osiris logs.'.format(instance['server']['dns'], status))
 
             yield message_log('Retrieving token for "{}"'.format(username))
             token = self.get_token(instance['server']['dns'], username, password)
@@ -119,23 +135,31 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         return success_log('Succesfully configured {}/customizeme.cfg'.format(self.buildout.folder))
 
     def configure_ldap(self):
+        """
+            Configure the right settings for ldap based on if :
+            branches option enabled or disabled
+        """
+
+        if self.config.ldap.branches.enabled:
+            effective_admin_dn = 'cn={admin_cn},ou={branch},{base_dn}'.format(branch=self.instance.ldap, **self.config.ldap.branches)
+            effective_admin_password = self.config.ldap.branches.admin_password
+            effective_users_base_dn = 'ou={},{}'.format(self.instance.ldap, self.config.ldap.branches.base_dn)
+            effective_groups_base_dn = 'ou=groups,ou={},{}'.format(self.instance.ldap, self.config.ldap.branches.base_dn)
+        else:
+            effective_admin_dn = self.config.ldap.admin_dn
+            effective_admin_password = self.config.ldap.admin_password
+            effective_users_base_dn = self.config.ldap.users_base_dn
+            effective_groups_base_dn = self.config.ldap.group_base_dn
 
         ldapini = configure_ini(
             string=LDAP_INI,
             params={
                 'ldap': {
-                    'server': 'ldaps://{}'.format(self.config.ldap.server),
-                    'password': self.config.ldap.branch_admin_password,
-                    'userbind': 'cn={},ou={},{}'.format(
-                        self.config.ldap.branch_admin_cn,
-                        self.instance.ldap,
-                        self.config.ldap.base_dn),
-                    'userbasedn': 'ou={},{}'.format(
-                        self.instance.ldap,
-                        self.config.ldap.base_dn),
-                    'groupbasedn': 'ou=groups,ou={},{}'.format(
-                        self.instance.ldap,
-                        self.config.ldap.base_dn)
+                    'server': self.config.ldap.server,
+                    'password': effective_admin_password,
+                    'userbind': effective_admin_dn,
+                    'userbasedn': effective_users_base_dn,
+                    'groupbasedn': effective_groups_base_dn
                 }
             }
         )
@@ -143,17 +167,20 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         self.remote.put_file(ldap_ini_location, ldapini)
         return success_log('Succesfully configured {}'.format(ldap_ini_location))
 
-    def create_max_nginx_entry(self):
+    def create_oauth_nginx_entry(self):
 
         nginx_params = {
             'instance_name': self.instance.name,
+            'server': self.config.server,
             'server_dns': self.config.server_dns,
             'osiris_port': int(self.instance.index) + OSIRIS_BASE_PORT
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
-        nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx_root, self.instance.name)
-        self.remote.put_file(nginx_file_location, nginxentry)
+        nginx_remote = RemoteConnection(self.config.nginx.ssh_user, self.config.nginx.server)
+
+        nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx.root, self.instance.name)
+        nginx_remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
 
     def commit_local_changes(self):
@@ -199,7 +226,7 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         yield self.configure_ldap()
 
         yield step_log('Creating nginx entry for oauth')
-        yield self.create_max_nginx_entry()
+        yield self.create_oauth_nginx_entry()
 
         yield step_log('Executing buildout')
         yield self.execute_buildout()
