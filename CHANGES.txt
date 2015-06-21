@@ -1,11 +1,15 @@
 Changelog
 =========
 
-2.1 (unreleased)
+2.1 (2015-06-21)
 ----------------
 
-- Nothing changed yet.
-
+* Add skippable error [Carles Bruguera]
+* Improve oauth test [Carles Bruguera]
+* Adapt to infrastructure changes, nginx location, no bigmax [Carles Bruguera]
+* failsafe commit to local branch [Carles Bruguera]
+* Add Manager users to mongo and rabbitmq [Carles Bruguera]
+* refactor to abstract branches concept to the maximum [Carles Bruguera]
 
 2.0 (2015-05-28)
 ----------------
