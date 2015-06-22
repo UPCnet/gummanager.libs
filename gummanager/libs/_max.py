@@ -281,7 +281,9 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             'server': self.config.server,
             'server_dns': self.config.server_dns,
             'bigmax_port': BIGMAX_BASE_PORT,
-            'max_port': int(self.instance.index) + MAX_BASE_PORT
+            'max_port': int(self.instance.index) + MAX_BASE_PORT,
+            'nginx_root_folder': self.config.nginx.root,
+            'max_root_folder': self.buildout.folder
         }
         nginxentry = MAX_NGINX_ENTRY.format(**nginx_params)
 
