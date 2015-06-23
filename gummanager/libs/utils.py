@@ -248,7 +248,3 @@ def circus_status(endpoint=None, process=None):
                 # circus stopped
                 default['status'] = 'unknown'
     return default
-
-
-def admin_password_for_branch(branch_name):
-    return '{}secret'.format(branch_name)

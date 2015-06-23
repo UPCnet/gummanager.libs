@@ -77,7 +77,7 @@ class UlearnSite(Plone, TokenHelper):
         """
         """
         username = 'restricted'
-        password = '{}secret'.format(ldap_branch)
+        password = '{}LidT8'.format(ldap_branch)
         oauth_server = "https://oauth.upcnet.es/{}".format(oauth_name)
         user_token = self.get_token(oauth_server, username, password)
         if user_token is None:

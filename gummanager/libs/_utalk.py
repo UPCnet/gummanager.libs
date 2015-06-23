@@ -9,7 +9,7 @@ Options:
 import gevent
 from gevent.event import AsyncResult
 from gummanager.libs.utils import padded_error, padded_success, progress_log, padded_log
-from gummanager.libs.utils import admin_password_for_branch, step_log, StepError, error_log
+from gummanager.libs.utils import step_log, StepError, error_log
 from gummanager.libs.utils import ReadyCounter, success_log, RemoteConnection
 from gummanager.libs.config_files import MAXBUNNY_INSTANCE_ENTRY
 from gummanager.libs.mixins import TokenHelper
@@ -45,11 +45,10 @@ class UTalkServer(TokenHelper, object):
         return success_log("Succesfully added {name} to maxbunny instance list".format(**configuration))
 
     def add_instance(self, **configuration):
-        ldap_branch = configuration['oauthserver']['ldap']['branch']
         token = self.get_token(
             configuration['oauthserver']['server']['dns'],
             configuration['restricted_user'],
-            admin_password_for_branch(ldap_branch)
+            configuration['restricted_user_password']
         )
 
         try:
@@ -59,21 +58,20 @@ class UTalkServer(TokenHelper, object):
                 name=configuration['name'],
                 hashtag=configuration['hashtag'],
                 server=configuration['maxserver']['server']['dns'],
-                restricted_user = configuration['restricted_user'],
-                restricted_user_token = token
+                restricted_user=configuration['restricted_user'],
+                restricted_user_token=token
             )
 
         except StepError as error:
             yield error_log(error.message)
 
-    def test(self, domain):
+    def test(self, domain, restricted_password):
         progress_log('Testing UTalk websocket communication')
 
         # Get a maxclient for this instance
         padded_log("Getting instance information")
 
         domain_info = self.getDomainInfo(domain)
-        restricted_password = admin_password_for_branch(domain_info['oauth']['ldap']['branch'])
         client = self.config.max.get_client(domain, username='restricted', password=restricted_password)
 
         padded_log("Setting up test clients")

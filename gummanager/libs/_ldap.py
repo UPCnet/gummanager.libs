@@ -3,7 +3,6 @@ from collections import Counter
 from collections import OrderedDict
 from gummanager.libs.batch import read_users_file
 from gummanager.libs.utils import StepError
-from gummanager.libs.utils import admin_password_for_branch
 from gummanager.libs.utils import command
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import raising_error_log
@@ -348,7 +347,7 @@ class LdapServer(object):
     # Commands
 
     @command
-    def add_branch(self, branch):
+    def add_branch(self, branch, branch_admin_password):
         if not self.config.branches.enabled:
             yield error_log('Branches are not enabled on this LDAP')
         if self.config.readonly:
@@ -364,7 +363,7 @@ class LdapServer(object):
 
         self.set_branch(branch)
         self.add_ldap_user_by_dn(branch_admin_user_dn, 'LDAP Access User', self.config.branches.admin_password)
-        self.add_ldap_user_by_dn(branch_restricted_user_dn, 'Restricted User', admin_password_for_branch(branch))
+        self.add_ldap_user_by_dn(branch_restricted_user_dn, 'Restricted User', branch_admin_password)
 
         self.add_group_by_dn('cn=Managers,ou={branch},{branches.base_dn}'.format(**self.config), user_dns=[branch_admin_user_dn])
         self.add_ou_by_dn('ou=groups,ou={branch},{branches.base_dn}'.format(**self.config))

@@ -15,7 +15,6 @@ from gummanager.libs.ports import BIGMAX_BASE_PORT
 from gummanager.libs.ports import MAX_BASE_PORT
 from gummanager.libs.pyramid import PyramidServer
 from gummanager.libs.utils import RemoteConnection
-from gummanager.libs.utils import admin_password_for_branch
 from gummanager.libs.utils import command
 from gummanager.libs.utils import error_log
 from gummanager.libs.utils import padded_error
@@ -85,14 +84,14 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             self._instances[instance_name] = instance
         return self._instances[instance_name]
 
-    def test_activity(self, instance_name, ldap_branch):
+    def test_activity(self, instance_name, ldap_branch, restricted_user_password):
 
         progress_log('Testing UTalk activity notifications')
 
         # Get a maxclient for this instance
         padded_log("Getting instance information")
         instance_info = self.get_instance(instance_name)
-        restricted_password = admin_password_for_branch(ldap_branch)
+        restricted_password = restricted_user_password
         client = self.get_client(instance_name, username='restricted', password=restricted_password)
 
         padded_log("Setting up test clients")
