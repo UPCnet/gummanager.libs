@@ -1,11 +1,11 @@
 Changelog
 =========
 
-2.2 (unreleased)
+2.2 (2015-06-23)
 ----------------
 
-- Nothing changed yet.
-
+* Finx nginx template [Carles Bruguera]
+* Include nginx avatar static configuration [Carles Bruguera]
 
 2.1 (2015-06-21)
 ----------------
