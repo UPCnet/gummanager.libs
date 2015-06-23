@@ -72,39 +72,39 @@ MAX_NGINX_ENTRY = """
         proxy_pass    http://{server}:{bigmax_port};
      }}
 
-    location ~ ^devupc/people/@@missing/avatar/large {
+    location ~ ^devupc/people/@@missing/avatar/large {{
         root {max_root_folder}/var/avatars;
         try_files /missing-people-large.png /missing-people.png =404;
         add_header Content-Type image/png;
-    }
+    }}
 
-    location ~ ^/devupc/people/@@missing/avatar {
+    location ~ ^/devupc/people/@@missing/avatar {{
         root {max_root_folder}/var/avatars;
         try_files /missing-people.png =404;
         add_header Content-Type image/png;
-    }
+    }}
 
-    location ~ ^/devupc/people/([^\/][^\/])([^\/]+)/avatar/large {
-        if ($request_method = POST){
+    location ~ ^/devupc/people/([^\/][^\/])([^\/]+)/avatar/large {{
+        if ($request_method = POST){{
             access_log   {nginx_root_folder}/var/log/nginx.max.access.log  main;
             proxy_pass   http://max_server;
-        }
+        }}
         root {max_root_folder}/var/avatars/people;
         access_log   {nginx_root_folder}/var/log/nginx.access.log  main;
         try_files /large/$1/$1$2 /$1/$1$2 /people/@@missing/avatar/large;
         add_header Content-Type image/png;
-    }
+    }}
 
-    location ~ ^/devupc/people/([^\/][^\/])([^\/]+)/avatar {
-        if ($request_method = POST){
+    location ~ ^/devupc/people/([^\/][^\/])([^\/]+)/avatar {{
+        if ($request_method = POST){{
             access_log   {nginx_root_folder}/var/log/nginx.max.access.log  main;
             proxy_pass   http://max_server;
-        }
+        }}
         root {max_root_folder}/var/avatars/people;
         access_log   {nginx_root_folder}/var/log/nginx.access.log  main;
         try_files /$1/$1$2 /people/@@missing/avatar;
         add_header Content-Type image/png;
-    }
+    }}
 
     location ~ ^/{instance_name}/(.*) {{
 
