@@ -220,7 +220,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             self.instance.name
         )
         code, stdout = self.remote.execute('cd {0} && ./bin/max.mongoindexes'.format(new_instance_folder))
-        added = 'Added' in stdout
+        added = 'Creating' in stdout or 'already exists' in stdout
 
         if added:
             return success_log("Succesfully added indexes")
@@ -228,53 +228,27 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
             return error_log("Error on adding indexes")
 
     def configure_max_security_settings(self):
-        try:
-            new_instance_folder = '{}/{}'.format(
-                self.config.instances_root,
-                self.instance.name
-            )
-            self.buildout.folder = new_instance_folder
+        new_instance_folder = '{}/{}'.format(
+            self.config.instances_root,
+            self.instance.name
+        )
+        self.buildout.folder = new_instance_folder
 
-            # Force read the new configuration files
-            self.buildout.reload()
-            maxini = self.buildout.config_files[self.instance.name]['max.ini']
-            maxconfig = parse_ini_from(maxini)
-            users = self.config.authorized_users
-            default_security = {'roles': {"Manager": users}}
-            hosts = self.config.mongodb.cluster
-            replica_set = self.config.mongodb.replica_set
-            conn = get_connection(hosts, replica_set)
-            db_name = maxconfig['app:main']['mongodb.db_name']
-            password = self.config.mongodb.password
-            db = get_database(conn, db_name, username=self.config.mongodb.username, password=password, authdb=self.config.mongodb.authdb)
+        code, stdout = self.remote.execute('cd {} && ./bin/max.security add {}'.format(new_instance_folder, self.config.authorized_user))
+        added = 'restart max process' in stdout
+        # Force read the new configuration files
 
-            if not [items for items in db.security.find({})]:
-                db.security.insert(default_security)
-
-            server = RabbitClient(maxconfig['app:main']['max.rabbitmq'])
-            server.declare()
-
-            # Create default users
-            for username in users:
-                if not db.users.find_one({'username': username}):
-                    db.users.insert({
-                        'username': username,
-                        '_owner': username,
-                        '_creator': username,
-                        'objectType': 'person',
-                        'subscribedTo': [],
-                        'following': [],
-                        'talkingIn': [],
-                        'published': datetime.datetime.utcnow()})
-                server.create_user(username)
-
-            server.disconnect()
-        except:
-            return error_log("Error on setting permissions settings")
-        return success_log("Succesfully changed permissions settings")
+        client = self.get_client(
+            self.instance.name,
+            username=self.config.authorized_user,
+            password=self.config.authorized_user_password)
+        client.people[self.config.authorized_user].post(qs=dict(notifications=True))
+        if added:
+            return success_log("Succesfully configured security settings")
+        else:
+            return error_log("Error configuring security settings")
 
     def create_max_nginx_entry(self):
-
         nginx_params = {
             'instance_name': self.instance.name,
             'server': self.config.server,
