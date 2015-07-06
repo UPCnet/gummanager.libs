@@ -34,7 +34,7 @@ def catch_ldap_errors(func):
             ld = args[0]
             if reason == 'No such object':
                 if func.__name__ == 'get_users':
-                    raise StepError('There\'s no branch "{}" @ {}'.format(ld.dn, ld.ldap_uri))
+                    raise StepError('There\'s no branch "{}" @ {}'.format(error.message['matched'], ld.ldap_uri))
 
             elif reason == 'Invalid credentials':
                 if func.__name__ == 'authenticate':
@@ -259,7 +259,7 @@ class LdapServer(object):
     @catch_ldap_errors
     def get_group_users(self, group_name, filter=None):
         ldap_result_id = self.ld.search(
-            self.effective_groups_base_dn,
+            self.effective_groups_dn,
             self.user_scope,
             "cn={}".format(group_name),
             None
@@ -278,7 +278,7 @@ class LdapServer(object):
     def get_groups(self):
         try:
             ldap_result_id = self.ld.search(
-                self.effective_groups_base_dn,
+                self.effective_groups_dn,
                 self.group_scope,
                 "cn=*",
                 None
@@ -295,8 +295,8 @@ class LdapServer(object):
                             'members': result_data[0][1].get('member', result_data[0][1].get('uniqueMember'))
                         })
             return result_set
-        except ldap.LDAPError, e:
-            print e
+        except ldap.LDAPError:
+            pass
 
     def get_branch(self, branch):
         self.set_branch(branch)
@@ -353,21 +353,25 @@ class LdapServer(object):
         if self.config.readonly:
             yield error_log('This LDAP is configured as read-only')
 
-        self.connect()
-        self.add_ou_by_dn("ou={branch},{branches.base_dn}".format(**self.config))
+        self.connect(auth=False)
+        self.authenticate(
+            username=self.config.admin_dn,
+            password=self.config.admin_password
+        )
+        self.add_ou_by_dn("ou={branch},{branches.base_dn}".format(branch=branch, **self.config))
 
         self.set_branch(branch)
 
-        branch_restricted_user_dn = "cn={branches.restricted_cn},ou={branch},{branches.base_dn}".format(**self.config)
-        branch_admin_user_dn = "cn={branches.admin_cn},ou={branch},{branches.base_dn}".format(**self.config)
+        branch_restricted_user_dn = "cn={branches.restricted_cn},ou={branch},{branches.base_dn}".format(branch=branch, **self.config)
+        branch_admin_user_dn = "cn={branches.admin_cn},ou={branch},{branches.base_dn}".format(branch=branch, **self.config)
 
         self.set_branch(branch)
         self.add_ldap_user_by_dn(branch_admin_user_dn, 'LDAP Access User', self.config.branches.admin_password)
         self.add_ldap_user_by_dn(branch_restricted_user_dn, 'Restricted User', branch_admin_password)
 
-        self.add_group_by_dn('cn=Managers,ou={branch},{branches.base_dn}'.format(**self.config), user_dns=[branch_admin_user_dn])
-        self.add_ou_by_dn('ou=groups,ou={branch},{branches.base_dn}'.format(**self.config))
-        self.add_ou_by_dn('ou=users,ou={branch},{branches.base_dn}'.format(**self.config))
+        self.add_group_by_dn('cn=Managers,ou={branch},{branches.base_dn}'.format(branch=branch, **self.config), user_dns=[branch_admin_user_dn])
+        self.add_ou_by_dn('ou=groups,ou={branch},{branches.base_dn}'.format(branch=branch, **self.config))
+        self.add_ou_by_dn('ou=users,ou={branch},{branches.base_dn}'.format(branch=branch, **self.config))
 
         # Add plain users
         for user in self.config.branches.base_users:
@@ -380,7 +384,11 @@ class LdapServer(object):
     def list_branches(self):
         if not self.config.branches.enabled:
             yield error_log('Branches are not enabled on this LDAP')
-        self.connect()
+        self.connect(auth=False)
+        self.authenticate(
+            username=self.config.admin_dn,
+            password=self.config.admin_password
+        )
         branches = self.get_branches()
         self.disconnect()
         yield return_value(branches)
