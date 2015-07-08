@@ -238,11 +238,6 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
         added = 'restart max process' in stdout
         # Force read the new configuration files
 
-        client = self.get_client(
-            self.instance.name,
-            username=self.config.authorized_user,
-            password=self.config.authorized_user_password)
-        client.people[self.config.authorized_user].post(qs=dict(notifications=True))
         if added:
             return success_log("Succesfully configured security settings")
         else:
