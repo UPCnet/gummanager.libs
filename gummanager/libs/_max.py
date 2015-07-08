@@ -234,6 +234,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
         )
         self.buildout.folder = new_instance_folder
 
+        self.remote.execute('cd {} && ./bin/max.security reset'.format(new_instance_folder))
         code, stdout = self.remote.execute('cd {} && ./bin/max.security add {}'.format(new_instance_folder, self.config.authorized_user))
         added = 'restart max process' in stdout
         # Force read the new configuration files
