@@ -1,11 +1,11 @@
 Changelog
 =========
 
-2.7 (unreleased)
+2.7 (2015-11-25)
 ----------------
 
-- Nothing changed yet.
-
+* Update code to newwst infrastucture changes [root]
+* Sanity reset security before adding user [Carles Bruguera]
 
 2.6 (2015-07-08)
 ----------------
