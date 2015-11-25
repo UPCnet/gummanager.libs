@@ -13,7 +13,7 @@ from gummanager.libs.utils import RemoteConnection
 from gummanager.libs.utils import StepError
 from gummanager.libs.utils import command
 from gummanager.libs.utils import configure_ini
-from gummanager.libs.utils import error_log
+from gummanager.libs.utils import error_log, raising_error_log, success
 from gummanager.libs.utils import message_log
 from gummanager.libs.utils import parse_ini_from
 from gummanager.libs.utils import step_log
@@ -21,6 +21,7 @@ from gummanager.libs.utils import success_log
 
 import re
 import requests
+from time import sleep
 
 
 class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, PyramidServer):
@@ -35,6 +36,19 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
 
         if not self.remote.file_exists(self.config.instances_root):
             self.remote.mkdir(self.config.instances_root)
+
+    def update_buildout(self):
+        result = self.buildout.upgrade(self.config.maxserver_buildout_branch, self.config.local_git_branch)
+        return success(result, "Succesfully commited local changes")
+
+    def reload_instance(self):
+        self.restart(self.instance.name)
+        sleep(1)
+        status = self.get_status(self.instance.name)
+        if status['status'] == 'running':
+            return success_log("Succesfully restarted oauth {}".format(self.instance.name))
+        else:
+            return error_log('Oauth instance {} is not running'.format(self.instance.name))
 
     def get_instance(self, instance_name):
         if instance_name not in self._instances:
@@ -83,34 +97,39 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
             try:
                 status = requests.get(instance['server']['dns'], verify=False).status_code
             except requests.ConnectionError:
-                yield error_log('Connection error, check nginx is running, and dns resolves as expected.')
+                yield raising_error_log('Connection error, check nginx is running, and dns resolves as expected.')
             except:
-                yield error_log('Unknown error trying to access oauth server. Check params and try again')
+                yield raising_error_log('Unknown error trying to access oauth server. Check params and try again')
             else:
                 if status == 500:
-                    yield error_log('Error on oauth server, Possible causes:\n  - ldap configuration error (bad server url?)\n  - Mongodb configuration error (bad replicaset name or hosts list?)\nCheck osiris log for more information.')
+                    yield raising_error_log('Error on oauth server, Possible causes:\n  - ldap configuration error (bad server url?)\n  - Mongodb configuration error (bad replicaset name or hosts list?)\nCheck osiris log for more information.')
                 elif status == 502:
-                    yield error_log('Server not respoding at {}. Check that:\n  - osiris process is running\n  - nginx upstream definition is pointing to the right host:port.'.format(instance['server']['dns']))
+                    yield raising_error_log('Server not respoding at {}. Check that:\n  - osiris process is running\n  - nginx upstream definition is pointing to the right host:port.'.format(instance['server']['dns']))
                 elif status == 504:
-                    yield error_log('Gateway timeout. Probably oauth server is giving timeout trying to contact ldap server')
+                    yield raising_error_log('Gateway timeout. Probably oauth server is giving timeout trying to contact ldap server')
                 elif status == 404:
-                    yield error_log('There''s no oauth server at {}. Chech there''s an nginx entry for this server.'.format(instance['server']['dns']))
+                    yield raising_error_log('There\'s no oauth server at {}. Chech there\'s an nginx entry for this server.'.format(instance['server']['dns']))
                 elif status != 200:
-                    yield error_log('Server {} responded with {} code. Check osiris logs.'.format(instance['server']['dns'], status))
+                    yield raising_error_log('Server {} responded with {} code. Check osiris logs.'.format(instance['server']['dns'], status))
 
             yield message_log('Retrieving token for "{}"'.format(username))
             token = self.get_token(instance['server']['dns'], username, password)
+            succeeded_retrieve_token = token is not None
 
-            if token is None:
-                yield error_log('Error retreiving token. Check username/password and try again')
+            if not succeeded_retrieve_token:
+                yield raising_error_log('Error retreiving token. Check username/password and try again')
 
             yield message_log('Checking retreived token')
-            succeed = self.check_token(instance['server']['dns'], username, token)
+            succeeded_check_token = self.check_token(instance['server']['dns'], username, token)
 
-            if not succeed:
-                yield error_log('Error retreiving token')
+            if not succeeded_check_token:
+                yield raising_error_log('Error retreiving token')
 
-            yield success_log('Oauth server check passed')
+            if succeeded_check_token and succeeded_retrieve_token:
+                yield success_log('Oauth server check passed')
+            else:
+                yield raising_error_log('Oauth server check failed')
+
         except StepError as error:
             yield error_log(error.message)
 
@@ -173,7 +192,9 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
             'instance_name': self.instance.name,
             'server': self.config.server,
             'server_dns': self.config.server_dns,
-            'osiris_port': int(self.instance.index) + OSIRIS_BASE_PORT
+            'osiris_port': int(self.instance.index) + OSIRIS_BASE_PORT,
+            'buildout_folder': self.buildout.folder,
+            'allowed_ips': '\n      '.join(['allow {};'.format(ip) for ip in self.config.oauth.allowed_ips])
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
@@ -239,3 +260,28 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
 
         yield step_log('Adding instance to supervisor config')
         yield self.configure_supervisor()
+
+    @command
+    def upgrade(self, instance_name, logecho=None):
+        self.buildout.cfgfile = self.config.oauth.cfg_file
+        self.buildout.logecho = logecho
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
+
+        self.set_instance(
+            name=instance_name,
+        )
+
+        yield step_log('Updating buildout')
+        yield self.update_buildout()
+
+        yield step_log('Executing buildout')
+        yield self.execute_buildout(update=True)
+
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
+
+        # yield step_log('Reloading oauth')
+        yield self.reload_instance()

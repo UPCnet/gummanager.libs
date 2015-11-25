@@ -92,13 +92,16 @@ class TokenHelper(object):
     @staticmethod
     def get_token(oauth_server, username, password):
         payload = {"grant_type": 'password',
-                   "client_id": 'MAX',
                    "scope": 'widgetcli',
                    "username": username,
                    "password": password
                    }
 
-        req = requests.post('{0}/token'.format(oauth_server), data=payload, verify=False)
+        req = requests.post(
+            '{0}/token'.format(oauth_server),
+            data=json.dumps(payload),
+            headers={'Content-Type': 'application/json'},
+            verify=False)
         response = json.loads(req.text)
         if req.status_code == 200:
             token = response.get("access_token")
@@ -114,7 +117,11 @@ class TokenHelper(object):
             "scope": 'widgetcli',
             "grant_type": 'password'
         }
-        req = requests.post('{0}/checktoken'.format(oauth_server), data=payload, verify=False)
+        req = requests.post(
+            '{0}/checktoken'.format(oauth_server),
+            data=json.dumps(payload),
+            headers={'Content-Type': 'application/json'},
+            verify=False)
         return req.status_code == 200
 
     @staticmethod
@@ -148,11 +155,13 @@ class SupervisorHelpers(object):
         result_status['server'] = 'http://{}:{}'.format(self.config.server, self.config.supervisor.port)
         result_status['status'] = status['status'].lower()
         result_status['pid'] = status['pid']
+
         result_status['uptime'] = status['uptime']
         return result_status
 
-    def start(self, instance_name):
-        progress_log('Starting instance')
+    def start(self, instance_name, padded=False):
+        if not padded:
+            progress_log('Starting instance')
         status = self.get_status(instance_name)
 
         process_name = self.process_name(instance_name)
@@ -172,19 +181,23 @@ class SupervisorHelpers(object):
         status = self.get_status(instance_name)
 
         while retries > 0 or status['status'] != 'running':
-            sleep(1)
+            sleep(0.5)
             status = self.get_status(instance_name)
             retries -= 1
 
         if status['status'] == 'running':
             padded_success('Process "{}" started'.format(process_name))
+            return True
         elif status['status'] in ['fatal', 'backoff']:
             padded_error('Process "{}" not started, an error occurred'.format(process_name))
+            return False
         else:
             padded_error('Process "{}" not started'.format(process_name))
+            return False
 
-    def stop(self, instance_name):
-        progress_log('Stopping instance')
+    def stop(self, instance_name, padded=False):
+        if not padded:
+            progress_log('Stopping instance')
 
         process_name = self.process_name(instance_name)
         supervisor = SupervisorControl(self.config)
@@ -197,15 +210,29 @@ class SupervisorHelpers(object):
         status = self.get_status(instance_name)
 
         while retries > 0 or status['status'] != 'stopped':
-            sleep(1)
+            sleep(0.5)
             status = self.get_status(instance_name)
             retries -= 1
 
         status = self.get_status(instance_name)
         if status['status'].lower() == 'stopped':
             padded_success('Instance "{}" stopped'.format(instance_name))
+            return True
         else:
             padded_error('Instance "{}" still active'.format(instance_name))
+            return False
+
+    def restart(self, instance_name):
+        progress_log('Restarting instance')
+
+        stop_result = self.stop(instance_name, padded=True)
+        if stop_result is True:
+            start_result = self.start(instance_name, padded=True)
+
+        if start_result is True:
+            padded_log('Instance "{}" restarted'.format(instance_name))
+        else:
+            padded_error('Instance "{}" not restarted'.format(instance_name))
 
 
 class NginxHelpers(object):

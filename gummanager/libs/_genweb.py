@@ -14,6 +14,7 @@ from StringIO import StringIO
 from collections import OrderedDict
 from pyquery import PyQuery
 import requests
+import re
 
 
 class Plone(object):
@@ -93,13 +94,14 @@ class Plone(object):
         setup_view_url = '{}/setupldap'.format(self.site_url)
         params = {
             "ldap_name": ldap_config.name,
-            "ldap_server": ldap_config.server,
+            "ldap_server": re.sub(r'ldaps?:\/\/', '', ldap_config.server),
             "branch_name": branch,
-            "base_dn": ldap_config.base_dn,
-            "branch_admin_cn": ldap_config.branch_admin_cn,
-            "branch_admin_password": ldap_config.branch_admin_password,
+            "base_dn": ldap_config.branches.base_dn,
+            "branch_admin_cn": ldap_config.branches.admin_cn,
+            "branch_admin_password": ldap_config.branches.admin_password,
             "allow_manage_users": True
         }
+
         req = requests.post(setup_view_url, data=params, auth=self.auth)
 
         if req.status_code not in [302, 200, 204, 201]:

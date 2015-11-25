@@ -46,7 +46,8 @@ class SupervisorControl(object):
         else:
             default['status'] = process_info['statename'].lower()
             default['pid'] = process_info['pid']
-            default['uptime'] = humanize.naturaltime(datetime.datetime.now() - datetime.datetime.fromtimestamp(process_info['now']))
+            start_date = datetime.datetime.fromtimestamp(process_info['start'])
+            default['uptime'] = humanize.naturaltime(start_date)
 
         return default
 

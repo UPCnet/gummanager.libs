@@ -36,6 +36,22 @@ exit 0
 
 OSIRIS_NGINX_ENTRY = """
     location = /{instance_name} {{rewrite ^([^.]*[^/])$ $1/ permanent;}}
+
+    location ^/{instance_name}/token-bypass {{
+      access_log {buildout_folder}/var/log/nginx.osiris.bypass-access.log  main;
+
+      {allowed_ips}
+      deny all;
+
+      proxy_set_header X-Virtual-Host-URI $scheme://{server_dns};
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $http_host;
+      proxy_redirect off;
+
+      proxy_pass   http://{server}:{osiris_port};
+
+    }}
+
     location ~ ^/{instance_name}/(.*) {{
         proxy_set_header X-Virtual-Host-URI $scheme://{server_dns};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

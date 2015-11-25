@@ -211,7 +211,7 @@ class RemoteBuildoutHelper(object):
         return stdout
 
     def merge(self, branch_name):
-        code, stdout = self.remote.execute('cd {} && git merge {} --no-commit > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+        code, stdout = self.remote.execute('cd {} && git merge -X theirs {} --no-commit > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder,
             branch_name),
             do_raise=False
@@ -227,6 +227,18 @@ class RemoteBuildoutHelper(object):
         code, stdout = self.remote.execute('cd {} && git add {} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder,
             filename),
+            do_raise=True
+        )
+        return stdout
+
+    def reset_upstream(self, branch):
+        code, stdout = self.remote.execute('cd {} && git fetch > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder),
+            do_raise=True
+        )
+        code, stdout = self.remote.execute('cd {} && git reset --hard origin/{} > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+            self.folder,
+            branch),
             do_raise=True
         )
         return stdout
@@ -262,7 +274,7 @@ class RemoteBuildoutHelper(object):
             raise StepError('Error after switching to {} branch'.format(fetch_from))
 
         # Pull changes from upstream
-        messages += self.pull()
+        messages += self.reset_upstream(fetch_from)
         if self.status != "clean":
             raise StepError('Error after pulling changes from {}'.format(fetch_from))
 

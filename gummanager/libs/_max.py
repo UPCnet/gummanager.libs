@@ -292,7 +292,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
         return success(result, "Succesfully commited local changes")
 
     def reload_instance(self):
-        self.reload(self.instance.name, 'max')
+        self.restart(self.instance.name)
         sleep(1)
         status = self.get_status(self.instance.name)
         if status['status'] == 'running':
@@ -382,7 +382,7 @@ class MaxServer(SupervisorHelpers, NginxHelpers, CommonSteps, PyramidServer):
         yield step_log('Changing permissions')
         yield self.set_filesystem_permissions()
 
-        yield step_log('Reloading max')
+        # yield step_log('Reloading max')
         yield self.reload_instance()
 
         yield step_log('Checking running version')
