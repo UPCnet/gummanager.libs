@@ -37,7 +37,7 @@ exit 0
 OSIRIS_NGINX_ENTRY = """
     location = /{instance_name} {{rewrite ^([^.]*[^/])$ $1/ permanent;}}
 
-    location ^/{instance_name}/token-bypass {{
+    location ~ ^/{instance_name}/token-bypass {{
       access_log {buildout_folder}/var/log/nginx.osiris.bypass-access.log  main;
 
       {allowed_ips}
@@ -47,6 +47,7 @@ OSIRIS_NGINX_ENTRY = """
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header Host $http_host;
       proxy_redirect off;
+      rewrite ^/{instance_name}/token-bypass /token-bypass break;
 
       proxy_pass   http://{server}:{osiris_port};
 
