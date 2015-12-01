@@ -14,6 +14,7 @@ from gummanager.libs.utils import step_log
 from gummanager.libs.utils import message_log
 from gummanager.libs.utils import StepError
 from gummanager.libs.utils import configure_ini
+from gummanager.libs.utils import command
 
 
 from time import sleep
@@ -250,12 +251,10 @@ class NginxHelpers(object):
         else:
             return error_log('Error reloading nginx')
 
+    @command
     def reload_nginx_configuration(self):
-        try:
-            yield step_log('Reloading nginx configuration')
-            yield message_log('Testing configuration')
+        yield step_log('Reloading nginx configuration')
+        yield message_log('Testing configuration')
 
-            yield self.test_nginx()
-            yield self.reload_nginx()
-        except StepError as error:
-            yield error_log(error.message)
+        yield self.test_nginx()
+        yield self.reload_nginx()

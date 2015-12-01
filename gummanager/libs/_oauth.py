@@ -187,22 +187,41 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         return success_log('Succesfully configured {}'.format(ldap_ini_location))
 
     def create_oauth_nginx_entry(self):
-
+        global_allowed_ips = self.config.oauth.allowed_ips
+        instance_allowed_ips = []
+        allowed_ips = global_allowed_ips + instance_allowed_ips
         nginx_params = {
             'instance_name': self.instance.name,
-            'server': self.config.server,
-            'server_dns': self.config.server_dns,
+            'server': self.config.oauth.server,
+            'server_dns': self.config.oauth.server_dns,
             'osiris_port': int(self.instance.index) + OSIRIS_BASE_PORT,
-            'buildout_folder': self.buildout.folder,
-            'allowed_ips': '\n      '.join(['allow {};'.format(ip) for ip in self.config.oauth.allowed_ips])
+            'buildout_folder': self.config.nginx.root,
+            'allowed_ips': '\n      '.join(['allow {};'.format(ip) for ip in allowed_ips])
         }
         nginxentry = OSIRIS_NGINX_ENTRY.format(**nginx_params)
 
         nginx_remote = RemoteConnection(self.config.nginx.ssh_user, self.config.nginx.server)
-
         nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx.root, self.instance.name)
         nginx_remote.put_file(nginx_file_location, nginxentry)
         return success_log("Succesfully created {}".format(nginx_file_location))
+
+    def backup_nginx_configuration(self):
+        nginx_remote = RemoteConnection(self.config.nginx.ssh_user, self.config.nginx.server)
+
+        nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx.root, self.instance.name)
+        backup_file_location = "{}/config/osiris-instances/{}.conf.backup".format(self.config.nginx.root, self.instance.name)
+        backup_content = nginx_remote.get_file(nginx_file_location)
+        nginx_remote.put_file(backup_file_location, backup_content)
+        return success_log("Succesfully backed up to {}".format(backup_file_location))
+
+    def recover_nginx_configuration(self):
+        nginx_remote = RemoteConnection(self.config.nginx.ssh_user, self.config.nginx.server)
+
+        nginx_file_location = "{}/config/osiris-instances/{}.conf".format(self.config.nginx.root, self.instance.name)
+        backup_file_location = "{}/config/osiris-instances/{}.conf.backup".format(self.config.nginx.root, self.instance.name)
+        backup_content = nginx_remote.get_file(backup_file_location)
+        nginx_remote.put_file(nginx_file_location, backup_content)
+        return success_log("Succesfully recovered backup from".format(backup_file_location))
 
     def commit_local_changes(self):
         self.buildout.commit_to_local_branch(
@@ -285,3 +304,27 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
 
         # yield step_log('Reloading oauth')
         yield self.reload_instance()
+
+    @command
+    def reconfigure_nginx(self, instance_name):
+        instance = self.get_instance(instance_name)
+        self.set_instance(
+            name=instance_name,
+            index=instance['port_index']
+
+        )
+
+        yield step_log('Backing up current configuration')
+        yield self.backup_nginx_configuration()
+
+        yield step_log('Creating nginx entry for oauth')
+        yield self.create_oauth_nginx_entry()
+
+        yield step_log('Testing new nginx configuration')
+        status = self.test_nginx()
+        if status[0] == 0:
+            self.recover_nginx_configuration()
+        yield status
+        import ipdb;ipdb.set_trace()
+        yield step_log('Reloading nginx')
+        yield self.reload_nginx()
