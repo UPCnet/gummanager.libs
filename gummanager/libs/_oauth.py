@@ -350,6 +350,12 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
 
     @command
     def reconfigure_nginx(self, instance_name):
+        self.buildout.cfgfile = self.config.oauth.cfg_file
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
+
         instance = self.get_instance(instance_name)
         self.set_instance(
             name=instance_name,
