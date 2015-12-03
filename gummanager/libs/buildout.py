@@ -1,4 +1,4 @@
-from gummanager.libs.utils import padded_log, configure_ini, StepError, error
+from gummanager.libs.utils import padded_log, configure_ini, StepError, error, parse_ini_from
 import tarfile
 from StringIO import StringIO
 import re
@@ -28,15 +28,15 @@ class RemoteBuildoutHelper(object):
         success = code == 0
         return success
 
-    def commit(self):
-        commit_message = 'Setup custom configuration'
+    def commit(self, message='Setup custom configuration'):
+        message = 'Setup custom configuration'
         code, stdout = self.remote.execute('cd {} && git commit . -m "{}"> /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder,
-            commit_message),
+            message),
             do_raise=True
         )
 
-        success = commit_message in stdout
+        success = message in stdout
         if not success:
             raise StepError('Error commiting, unexpected commit message')
         return stdout
@@ -139,6 +139,11 @@ class RemoteBuildoutHelper(object):
             raise StepError('Error on bootstraping {}'.format(self.folder))
         return stdout
 
+    def read_configuration_file(self, cfgfile):
+        remote_file = "{}/{}".format(self.folder, cfgfile)
+        file_contents = self.remote.get_file(remote_file)
+        return parse_ini_from(file_contents)
+
     def configure_file(self, cfgfile, params):
         remote_file = "{}/{}".format(self.folder, cfgfile)
         customizeme = configure_ini(
@@ -170,7 +175,7 @@ class RemoteBuildoutHelper(object):
         code, stdout = self.remote.execute('cd {0} && chown -R {1}:{1} .'.format(self.folder, uid), do_raise=True)
         return code == 0
 
-    def commit_to_local_branch(self, git_branch_name, files=[]):
+    def commit_to_local_branch(self, git_branch_name, files=[], message=None):
         code = 0
         stdout = 'branch {} already created'.format(git_branch_name)
         commit_log = 'No files to commit'
@@ -188,7 +193,10 @@ class RemoteBuildoutHelper(object):
 
             success = self.current_branch == git_branch_name
             if success:
-                commit_log = self.commit()
+                commit_args = {}
+                if message is not None:
+                    commit_args['message'] = message
+                commit_log = self.commit(**commit_args)
 
             success = self.status == "clean"
         if not(code == 0 and success):

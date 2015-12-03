@@ -211,6 +211,7 @@ def configure_ini(string=None, filename=None, url=None, params={}, append=False)
     text = out.read()
     text = text.replace('""', '')
     text = text.replace("'''", '')
+    text = re.sub(r'(^|\n)\s*#', r'\1#', text)
     return text
 
 

@@ -188,8 +188,8 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
 
     def create_oauth_nginx_entry(self):
         global_allowed_ips = self.config.oauth.allowed_ips
-        instance_allowed_ips = []
-        allowed_ips = global_allowed_ips + instance_allowed_ips
+        instance_allowed_ips = self.get_instance_allowed_ips()
+        allowed_ips = instance_allowed_ips + global_allowed_ips
         nginx_params = {
             'instance_name': self.instance.name,
             'server': self.config.oauth.server,
@@ -223,14 +223,57 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         nginx_remote.put_file(nginx_file_location, backup_content)
         return success_log("Succesfully recovered backup from".format(backup_file_location))
 
-    def commit_local_changes(self):
+    def commit_local_changes(self, message=None):
         self.buildout.commit_to_local_branch(
             self.config.local_git_branch,
             files=[
                 'customizeme.cfg',
                 'mongoauth.cfg'
-            ])
+            ],
+            message=message)
         return success_log("Succesfully commited local changes")
+
+    def get_instance_allowed_ips(self):
+        """
+            Get the ips that are currently configured on [osiris-config] allowed_ips.
+
+            If there's only one ip configured, the value will be a string, so we adapt it.
+        """
+        configured_ips = self.buildout.read_configuration_file('customizeme.cfg')['osiris-config'].get('allowed_ips', [])
+        configured_ips = [a.strip() for a in configured_ips.split(' ') if a.strip()] if isinstance(configured_ips, str) else configured_ips
+        return configured_ips
+
+    def add_new_bypass_allowed_ip(self, ip):
+        configured_ips = self.get_instance_allowed_ips()
+        allowed_ips = list(set(configured_ips + [ip]))
+
+        if not set(allowed_ips).symmetric_difference(set(configured_ips)):
+            return message_log('No changes to allowed ips on {}/customizeme.cfg'.format(self.buildout.folder))
+
+        customizations = {
+            'osiris-config': {
+                'allowed_ips': allowed_ips,
+            },
+        }
+
+        self.buildout.configure_file('customizeme.cfg', customizations)
+        return success_log('Succesfully updated allowed ips on {}/customizeme.cfg'.format(self.buildout.folder))
+
+    def remove_bypass_allowed_ip(self, ip):
+        configured_ips = self.get_instance_allowed_ips()
+        allowed_ips = list(set(configured_ips) - set([ip]))
+
+        if not set(allowed_ips).symmetric_difference(set(configured_ips)):
+            return message_log('No changes to allowed ips on {}/customizeme.cfg'.format(self.buildout.folder))
+
+        customizations = {
+            'osiris-config': {
+                'allowed_ips': allowed_ips,
+            }
+        }
+
+        self.buildout.configure_file('customizeme.cfg', customizations)
+        return success_log('Succesfully updated allowed ips on {}/customizeme.cfg'.format(self.buildout.folder))
 
     # COMMANDS
 
@@ -325,6 +368,80 @@ class OauthServer(SupervisorHelpers, NginxHelpers, CommonSteps, TokenHelper, Pyr
         if status[0] == 0:
             self.recover_nginx_configuration()
         yield status
-        import ipdb;ipdb.set_trace()
+
+        yield step_log('Reloading nginx')
+        yield self.reload_nginx()
+
+    @command
+    def add_allowed_ip(self, instance_name, new_ip):
+        instance = self.get_instance(instance_name)
+        self.set_instance(
+            name=instance_name,
+            index=instance['port_index']
+        )
+
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
+
+        yield step_log('Backing up current configuration')
+        yield self.backup_nginx_configuration()
+
+        yield step_log('Adding new allowed ip')
+        yield self.add_new_bypass_allowed_ip(new_ip)
+
+        yield step_log('Creating nginx entry for oauth')
+        yield self.create_oauth_nginx_entry()
+
+        yield step_log('Testing new nginx configuration')
+        status = self.test_nginx()
+        if status[0] == 0:
+            yield self.recover_nginx_configuration()
+        yield status
+
+        yield step_log('Commiting to local branch')
+        yield self.commit_local_changes(message='Added allowed ip')
+
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
+
+        yield step_log('Reloading nginx')
+        yield self.reload_nginx()
+
+    @command
+    def remove_allowed_ip(self, instance_name, existing_ip):
+        instance = self.get_instance(instance_name)
+        self.set_instance(
+            name=instance_name,
+            index=instance['port_index']
+        )
+
+        self.buildout.folder = '{}/{}'.format(
+            self.config.instances_root,
+            instance_name
+        )
+
+        yield step_log('Backing up current configuration')
+        yield self.backup_nginx_configuration()
+
+        yield step_log('Adding new allowed ip')
+        yield self.remove_bypass_allowed_ip(existing_ip)
+
+        yield step_log('Creating nginx entry for oauth')
+        yield self.create_oauth_nginx_entry()
+
+        yield step_log('Testing new nginx configuration')
+        status = self.test_nginx()
+        if status[0] == 0:
+            yield self.recover_nginx_configuration()
+        yield status
+
+        yield step_log('Commiting to local branch')
+        yield self.commit_local_changes(message='Removed allowed ip')
+
+        yield step_log('Changing permissions')
+        yield self.set_filesystem_permissions()
+
         yield step_log('Reloading nginx')
         yield self.reload_nginx()
