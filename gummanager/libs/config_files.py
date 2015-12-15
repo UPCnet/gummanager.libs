@@ -78,7 +78,7 @@ MAX_NGINX_ENTRY = """
         proxy_set_header Connection "upgrade";
      }}
 
-    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|messages|admin|info).*$ {{
+    location ~* ^/{instance_name}/(?!contexts|people|activities|conversations|messages|tokens|admin|info).*$ {{
         access_log {nginx_root_folder}/var/log/nginx.hub.access.log  main;
         proxy_set_header X-Virtual-Host-URI $scheme://{server_dns};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
