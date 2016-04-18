@@ -56,13 +56,13 @@ class RemoteBuildoutHelper(object):
 
     @property
     def current_branch(self):
-        code, stdout = self.remote.execute('cd {} && git status > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
+        code, stdout = self.remote.execute('cd {} && git branch > /tmp/gitlog 2>&1 && cat /tmp/gitlog'.format(
             self.folder)
         )
         if code != 0:
             stdout = self.remote.get_file('/tmp/gitlog')
 
-        match = re.search(r"branch (.*?)\n", stdout)
+        match = re.search(r"\* (.*?)\n", stdout)
         branch_name = match.groups()[0] if match else None
 
         return branch_name if (code == 0 and branch_name) else None
