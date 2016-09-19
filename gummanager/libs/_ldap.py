@@ -262,7 +262,7 @@ class LdapServer(object):
         ldap_result_id = self.ld.search(
             self.effective_groups_dn,
             self.user_scope,
-            "cn=" + group_name.encode('utf-8'),
+            "cn={}".format(group_name),
             None
         )
         result_set = []
@@ -272,13 +272,8 @@ class LdapServer(object):
                 break
             else:
                 if result_type == ldap.RES_SEARCH_ENTRY:
-                    try:
-                        # If group has no meber the RE returns an error...
-                        result_set += [re.match("cn=(.*?),.*", member).groups()[0] for member in result_data[0][1].get('member')]
-                    except TypeError:
-                        # If [re.match("cn=(.*?),.*", member).groups()[0] has
-                        # no member then continue anb pass the error on search.
-                        pass
+                    result_set += [re.match("cn=(.*?),.*", member).groups()[0] for member in result_data[0][1].get('member',[])]
+
         return result_set
 
     @catch_ldap_errors
