@@ -1,11 +1,17 @@
 Changelog
 =========
 
-2.8 (unreleased)
+2.8 (2016-11-17)
 ----------------
 
-- Nothing changed yet.
-
+* delete utf-8 to groups search [Pilar Marinas]
+* added utf-8 to groups search [roberto.diaz]
+* modified current_branch, now using command git branch instead of git status [Vicente Iranzo Maestre]
+* Add tokens root endpoint to nginx config [Carles Bruguera]
+* Configure buildout helper [Carles Bruguera]
+* Add commands to add/remove allowed ips [Carles Bruguera]
+* New command to reconfigure nginx entry [Carles Bruguera]
+* Fix token-bypass entry [Carles Bruguera]
 
 2.7 (2015-11-25)
 ----------------
