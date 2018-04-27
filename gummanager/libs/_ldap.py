@@ -272,7 +272,7 @@ class LdapServer(object):
                 break
             else:
                 if result_type == ldap.RES_SEARCH_ENTRY:
-                    result_set += [re.match("cn=(.*?),.*", member).groups()[0] for member in result_data[0][1].get('member',[])]
+                    result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('member',[])]
 
         return result_set
 
