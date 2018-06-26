@@ -1,11 +1,10 @@
 Changelog
 =========
 
-2.9 (unreleased)
+2.9 (2018-06-26)
 ----------------
 
-- Nothing changed yet.
-
+* Added ignorecase te regexp [Roberto Diaz]
 
 2.8 (2016-11-17)
 ----------------
