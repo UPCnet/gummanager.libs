@@ -272,7 +272,12 @@ class LdapServer(object):
                 break
             else:
                 if result_type == ldap.RES_SEARCH_ENTRY:
-                    result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('member',[])]
+                    if 'member' in result_data[0][1]:
+                        result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('member',[])]
+                    elif 'uniqueMember' in result_data[0][1]:
+                        result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('uniqueMember',[])]
+                    else:
+                        raise Exception('Not a groupOfNames or groupOfUniqueNames: {}'.format(str(result_data)))
 
         return result_set
 
