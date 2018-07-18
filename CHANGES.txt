@@ -1,11 +1,10 @@
 Changelog
 =========
 
-2.10 (unreleased)
+2.10 (2018-07-18)
 -----------------
 
-- Nothing changed yet.
-
+* Expanded users groups for member and uniqueMember [Pilar Marinas]
 
 2.9 (2018-06-26)
 ----------------
