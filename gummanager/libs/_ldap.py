@@ -258,6 +258,14 @@ class LdapServer(object):
 
     @catch_ldap_errors
     def get_group_users(self, group_name, filter=None):
+        '''
+        If ldap_type = ad_samaccountname in hub configuration, group membership
+        is retrieved by a "memberOf" filter in ldap search. And also in this case
+        sAMAccountName is retrieved instead of CN or DN.
+        Otherwise, the search is performed retrieving iterating around the
+        members of the Group object. The CN is obtained by a regex that cuts from
+        CN= until the first , 
+        '''
         # Add utf-8 to search
         ldap_result_id = self.ld.search(
             self.effective_groups_dn,
@@ -266,18 +274,39 @@ class LdapServer(object):
             None
         )
         result_set = []
-        while 1:
+        if self.config.get('ldap_type','') == 'ad_samaccountname':
             result_type, result_data = self.ld.result(ldap_result_id, 0)
             if (result_data == []):
-                break
-            else:
-                if result_type == ldap.RES_SEARCH_ENTRY:
-                    if 'member' in result_data[0][1]:
-                        result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('member',[])]
-                    elif 'uniqueMember' in result_data[0][1]:
-                        result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('uniqueMember',[])]
-                    else:
-                        raise Exception('Not a groupOfNames or groupOfUniqueNames: {}'.format(str(result_data)))
+                return result_set
+            group_id = result_data[0][0]
+            memberof_search = self.ld.search(
+                self.effective_groups_dn,
+                self.user_scope,
+                #"(&(memberOf:1.2.840.113556.1.4.1941:={})(objectclass=user)(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))".format(group_id),
+                "(&(memberOf={})(objectclass=user)(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))".format(group_id),
+                None
+            )
+            while 1:
+                result_type, result_data = self.ld.result(memberof_search,0)
+                if (result_data == []):
+                    break
+                else:
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        result_set += result_data[0][1]['sAMAccountName']
+
+        else:
+            while 1:
+                result_type, result_data = self.ld.result(ldap_result_id, 0)
+                if (result_data == []):
+                    break
+                else:
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        if 'member' in result_data[0][1]:
+                            result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('member',[])]
+                        elif 'uniqueMember' in result_data[0][1]:
+                            result_set += [re.match("cn=(.*?),.*", member, flags=re.IGNORECASE).groups()[0] for member in result_data[0][1].get('uniqueMember',[])]
+                        else:
+                            raise Exception('Not a groupOfNames or groupOfUniqueNames: {}'.format(str(result_data)))
 
         return result_set
 
