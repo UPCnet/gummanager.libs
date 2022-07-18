@@ -1,11 +1,10 @@
 Changelog
 =========
 
-2.11 (unreleased)
+2.11 (2022-07-18)
 -----------------
 
-- Nothing changed yet.
-
+* Code added to support sAMCCOUNTName login environments [vicente.iranzo-maestre]
 
 2.10 (2018-07-18)
 -----------------

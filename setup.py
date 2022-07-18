@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-version = '2.11.dev0'
+version = '2.11'
 
 long_description = (
     open('README.txt').read()
@@ -33,6 +33,7 @@ setup(name='gummanager.libs',
       zip_safe=False,
       install_requires=[
           'setuptools',
+          'ipdb',
           # -*- Extra requirements: -*-
           'python-ldap',
           'requests',
